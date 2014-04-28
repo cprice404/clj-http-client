@@ -3,7 +3,7 @@
             [clojure.java.io :refer [resource]] 
             [puppetlabs.certificate-authority.core :as ssl]
             [puppetlabs.http.client.async :as http])
-  (:import [javax.net.ssl SSLEngine]))
+  (:import [javax.net.ssl SSLContext]))
 
 (deftest ssl-config-with-files
   (let [req {:url "http://localhost"
@@ -13,8 +13,8 @@
              :ssl-ca-cert (resource "ssl/ca.pem")}
         configured-req (http/configure-ssl req)]
 
-    (testing "configure-ssl sets up an SSLEngine when given cert, key, ca-cert"
-      (is (instance? SSLEngine (:sslengine configured-req))))
+    (testing "configure-ssl sets up an SSLContext when given cert, key, ca-cert"
+      (is (instance? SSLContext (:ssl-context configured-req))))
 
     (testing "removes ssl-cert, ssl-key, ssl-ca-cert"
       (is (not (:ssl-cert configured-req)))
@@ -25,8 +25,8 @@
   (let [req {:ssl-ca-cert (resource "ssl/ca.pem")}
         configured-req (http/configure-ssl req)]
 
-    (testing "configure-ssl sets up an SSLEngine when given ca-cert"
-      (is (instance? SSLEngine (:sslengine configured-req))))
+    (testing "configure-ssl sets up an SSLContext when given ca-cert"
+      (is (instance? SSLContext (:ssl-context configured-req))))
 
     (testing "removes ssl-ca-cert"
       (is (not (:ssl-ca-cert configured-req))))))
@@ -49,15 +49,4 @@
         configured-req (http/configure-ssl req)]
 
     (testing "configure-ssl uses an existing ssl context"
-      (is (instance? SSLEngine (:sslengine configured-req))))))
-
-(deftest ssl-config-with-sslengine
-  (let [req {:url "http://localhost"
-             :method :get
-             :ssl-cert (resource "ssl/cert.pem")
-             :ssl-key (resource "ssl/key.pem")
-             :ssl-ca-cert (resource "ssl/ca.pem")
-             :sslengine "thing"}
-        configured-req (http/configure-ssl req)]
-    (testing "configure-ssl does nothing when :sslengine is given"
-      (is (= req configured-req)))))
+      (is (instance? SSLContext (:ssl-context configured-req))))))

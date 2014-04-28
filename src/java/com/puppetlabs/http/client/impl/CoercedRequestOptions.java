@@ -1,8 +1,8 @@
 package com.puppetlabs.http.client.impl;
 
-import org.httpkit.HttpMethod;
+import com.puppetlabs.http.client.HttpMethod;
 
-import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLContext;
 import java.util.Map;
 
 public class CoercedRequestOptions {
@@ -10,19 +10,19 @@ public class CoercedRequestOptions {
     private final HttpMethod method;
     private final Map<String, Object> headers;
     private final Object body;
-    private final SSLEngine sslEngine;
+    private final SSLContext sslContext;
 
 
     public CoercedRequestOptions(String url,
                                  HttpMethod method,
                                  Map<String, Object> headers,
                                  Object body,
-                                 SSLEngine sslEngine) {
+                                 SSLContext sslContext) {
         this.url = url;
         this.method = method;
         this.headers = headers;
         this.body = body;
-        this.sslEngine = sslEngine;
+        this.sslContext = sslContext;
     }
 
     public String getUrl() {
@@ -41,7 +41,7 @@ public class CoercedRequestOptions {
         return body;
     }
 
-    public SSLEngine getSslEngine() {
-        return sslEngine;
+    public SSLContext getSslContext() {
+        return sslContext;
     }
 }

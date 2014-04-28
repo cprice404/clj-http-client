@@ -1,58 +1,30 @@
 package com.puppetlabs.http.client.impl;
 
+import com.puppetlabs.http.client.HttpClientException;
+import com.puppetlabs.http.client.HttpMethod;
 import com.puppetlabs.http.client.HttpResponse;
 import com.puppetlabs.http.client.RequestOptions;
-import org.httpkit.HttpMethod;
-import org.httpkit.client.*;
 
-import javax.net.ssl.SSLEngine;
-import javax.xml.bind.DatatypeConverter;
+import org.apache.http.Header;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpRequestBase;
+import org.apache.http.concurrent.FutureCallback;
+import org.apache.http.impl.nio.client.CloseableHttpAsyncClient;
+import org.apache.http.impl.nio.client.HttpAsyncClients;
+
+import javax.net.ssl.*;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.net.URLEncoder;
+import java.io.InputStream;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.util.HashMap;
 import java.util.Map;
 
 public class JavaClient {
 
-    private static HttpClient defaultClient = null;
-
-    private static HttpClient getDefaultClient() throws IOException {
-        if (defaultClient == null) {
-            defaultClient = new HttpClient();
-        }
-        return defaultClient;
-    }
-
-    private static String buildQueryString(Map<String, String> params) {
-        // TODO: add support for nested query params.  For now we assume a flat,
-        // String->String data structure.
-        StringBuilder sb = new StringBuilder();
-        boolean first = true;
-        for (Map.Entry<String, String> entry : params.entrySet()) {
-            if (!first) {
-                sb.append("&");
-            }
-            first = false;
-            try {
-                sb.append(URLEncoder.encode(entry.getKey(), "utf8"));
-                sb.append("=");
-                sb.append(URLEncoder.encode(entry.getValue(), "utf8"));
-            } catch (UnsupportedEncodingException e) {
-                throw new RuntimeException("Error while url-encoding query string", e);
-            }
-        }
-        return sb.toString();
-    }
-
-    private static String getBasicAuthValue(BasicAuth auth) {
-        String userPasswordStr = auth.getUser() + ":" + auth.getPassword();
-        try {
-            return "Basic " + DatatypeConverter.printBase64Binary(userPasswordStr.getBytes("utf8"));
-        } catch (UnsupportedEncodingException e) {
-            throw new RuntimeException("Error while attmempting to encode basic auth", e);
-        }
-    }
+    private static final String PROTOCOL = "TLS";
 
     private static Map<String, Object> prepareHeaders(RequestOptions options) {
         Map<String, Object> result = new HashMap<String, Object>();
@@ -61,86 +33,140 @@ public class JavaClient {
                 result.put(entry.getKey(), entry.getValue());
             }
         }
-
-        if (options.getFormParams() != null) {
-            result.put("Content-Type", "application/x-www-form-urlencoded");
-        }
-        if (options.getBasicAuth() != null) {
-            result.put("Authorization", getBasicAuthValue(options.getBasicAuth()));
-        }
-        if (options.getOAuthToken() != null) {
-            result.put("Authorization", "Bearer " + options.getOAuthToken());
-        }
-        if (options.getUserAgent() != null) {
-            result.put("User-Agent", options.getUserAgent());
-        }
         return result;
     }
 
-    private static CoercedRequestOptions coerceRequestOptions(RequestOptions options) throws IOException {
-        String url;
-        if (options.getQueryParams() != null) {
-            if (options.getUrl().indexOf('?') == -1) {
-                url = options.getUrl() + "?" + buildQueryString(options.getQueryParams());
-            } else {
-                url = options.getUrl() + "&" + buildQueryString(options.getQueryParams());
-            }
-        } else {
-            url = options.getUrl();
-        }
+    private static CoercedRequestOptions coerceRequestOptions(RequestOptions options) {
+        String url = options.getUrl();
 
-        SSLEngine sslEngine = null;
-        if (options.getSslEngine() != null) {
-            sslEngine = options.getSslEngine();
+        SSLContext sslContext = null;
+        if (options.getSslContext() != null) {
+            sslContext = options.getSslContext();
         } else if (options.getInsecure()) {
-            sslEngine = SslContextFactory.trustAnybody();
+            sslContext = getInsecureSslContext();
         }
 
-        HttpMethod method = options.getMethod().getValue();
+        HttpMethod method = options.getMethod();
         if (method == null) {
             method = HttpMethod.GET;
         }
 
         Map<String, Object> headers = prepareHeaders(options);
 
-        Object body;
-        if (options.getFormParams() != null) {
-            body = buildQueryString(options.getFormParams());
-        } else {
-            body = options.getBody();
-        }
+        Object body = options.getBody();
 
-        if (options.getMultipartEntities() != null) {
-            String boundary = MultipartEntity.genBoundary(options.getMultipartEntities());
-
-            headers = options.getHeaders();
-            headers.put("Content-Type", "multipart/form-data; boundary=" + boundary);
-
-            body = MultipartEntity.encode(boundary, options.getMultipartEntities());
-        }
-
-        return new CoercedRequestOptions(url, method, headers, body, sslEngine);
+        return new CoercedRequestOptions(url, method, headers, body, sslContext);
     }
 
-    public static Promise<HttpResponse> request(RequestOptions options, IResponseCallback callback)
-            throws IOException {
-        HttpClient client = options.getClient();
-        if (client == null) {
-            client = getDefaultClient();
+    private static SSLContext getInsecureSslContext() {
+        SSLContext context = null;
+        try {
+            context = SSLContext.getInstance(PROTOCOL);
+        } catch (NoSuchAlgorithmException e) {
+            throw new HttpClientException("Unable to construct HTTP context", e);
         }
+        try {
+            context.init(null, new TrustManager[] {
+                    new X509TrustManager() {
+                        public X509Certificate[] getAcceptedIssuers() {
+                            return new X509Certificate[0];
+                        }
 
+                        public void checkClientTrusted(X509Certificate[] chain,
+                                                       String authType) throws CertificateException {
+                            // Always trust
+                        }
+
+                        public void checkServerTrusted(X509Certificate[] chain,
+                                                       String authType) throws CertificateException {
+                            // Always trust
+                        }
+                    }},
+                    null);
+        } catch (KeyManagementException e) {
+            throw new HttpClientException("Unable to initialize insecure SSL context", e);
+        }
+        return context;
+    }
+
+    public static Promise<HttpResponse> request(final RequestOptions options, final IResponseCallback callback) {
         CoercedRequestOptions coercedOptions = coerceRequestOptions(options);
 
-        RequestConfig config = new RequestConfig(coercedOptions.getMethod(),
-                coercedOptions.getHeaders(), coercedOptions.getBody(),
-                options.getTimeout(), options.getKeepalive());
+        final CloseableHttpAsyncClient client = createClient(coercedOptions);
 
-        RespListener listener = new RespListener(
-                new ResponseHandler(options, coercedOptions, callback), options.getFilter(),
-                options.getWorkerPool(), options.getAs().getValue());
+        HttpRequestBase request = buildRequest(coercedOptions);
 
-        client.exec(options.getUrl(), config, coercedOptions.getSslEngine(), listener);
+        final Promise<HttpResponse> promise = new Promise<HttpResponse>();
 
-        return options.getPromise();
+        client.execute(request, new FutureCallback<org.apache.http.HttpResponse>() {
+            @Override
+            public void completed(org.apache.http.HttpResponse httpResponse) {
+                InputStream body = null;
+                try {
+                    body = httpResponse.getEntity().getContent();
+                } catch (IOException e) {
+                    deliverResponse(client, options, new HttpResponse(options, e), callback, promise);
+                }
+                Map<String, String> headers = new HashMap<String, String>();
+                for (Header h : httpResponse.getAllHeaders()) {
+                    headers.put(h.getName(), h.getValue());
+                }
+                deliverResponse(client, options, new HttpResponse(options, body, headers, httpResponse.getStatusLine().getStatusCode()), callback, promise);
+            }
+
+            @Override
+            public void failed(Exception e) {
+                deliverResponse(client, options, new HttpResponse(options, e), callback, promise);
+            }
+
+            @Override
+            public void cancelled() {
+                deliverResponse(client, options, new HttpResponse(options, new HttpClientException("Request cancelled", null)), callback, promise);
+            }
+        });
+
+        return promise;
+    }
+
+    private static CloseableHttpAsyncClient createClient(CoercedRequestOptions coercedOptions) {
+        CloseableHttpAsyncClient client;
+        if (coercedOptions.getSslContext() != null) {
+            client = HttpAsyncClients.custom().setSSLContext(coercedOptions.getSslContext()).build();
+        } else {
+            client = HttpAsyncClients.createDefault();
+        }
+        client.start();
+        return client;
+    }
+
+    private static void deliverResponse(CloseableHttpAsyncClient client, RequestOptions options,
+                                        HttpResponse httpResponse, IResponseCallback callback,
+                                        Promise<HttpResponse> promise) {
+        try {
+            if (callback != null) {
+                try {
+                    promise.deliver(callback.handleResponse(httpResponse));
+                } catch (Exception ex) {
+                    promise.deliver(new HttpResponse(options, ex));
+                }
+            } else {
+                promise.deliver(httpResponse);
+            }
+        } finally {
+            try {
+                client.close();
+            } catch (IOException e) {
+                throw new HttpClientException("Unable to close client", e);
+            }
+        }
+    }
+
+    private static HttpRequestBase buildRequest(CoercedRequestOptions coercedOptions) {
+        switch (coercedOptions.getMethod()) {
+            case GET:
+                return new HttpGet(coercedOptions.getUrl());
+            default:
+                throw new HttpClientException("Unable to construct request for:" + coercedOptions.getMethod() + ", " + coercedOptions.getUrl(), null);
+        }
     }
 }
