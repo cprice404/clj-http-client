@@ -1,10 +1,11 @@
 package com.puppetlabs.http.client;
 
 import com.puppetlabs.http.client.impl.*;
-import org.httpkit.client.HttpClient;
-
-import org.httpkit.client.IFilter;
-import org.httpkit.client.MultipartEntity;
+import org.apache.http.nio.client.HttpAsyncClient;
+//import org.httpkit.client.HttpClient;
+//
+//import org.httpkit.client.IFilter;
+//import org.httpkit.client.MultipartEntity;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
@@ -14,14 +15,14 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 
 public class RequestOptions {
-    private HttpClient client = DefaultClient.getInstance();
+    private HttpAsyncClient client = null;
     private int timeout = 60000;
     private boolean followRedirects = true;
     private int maxRedirects = 10;
-    // TODO: we are technically leaking this http-kit class into our API,
-    // but since we're not using it anywhere I decided not to worry about it yet.
-    private IFilter filter = IFilter.ACCEPT_ALL;
-    private ExecutorService workerPool = DefaultWorkerPool.getInstance();
+//    // TODO: we are technically leaking this http-kit class into our API,
+//    // but since we're not using it anywhere I decided not to worry about it yet.
+//    private IFilter filter = IFilter.ACCEPT_ALL;
+//    private ExecutorService workerPool = DefaultWorkerPool.getInstance();
     private Promise<HttpResponse> promise = new Promise<HttpResponse>();
     private int keepalive = 120000;
     private ResponseBodyType as = ResponseBodyType.AUTO;
@@ -42,19 +43,19 @@ public class RequestOptions {
     private String sslCaCert;
     private boolean insecure = false;
     private Object body;
-    // TODO: we are technically leaking this http-kit class into our API,
-    // but since we're not using it anywhere I decided not to worry about it yet.
-    private List<MultipartEntity> multipartEntities;
+//    // TODO: we are technically leaking this http-kit class into our API,
+//    // but since we're not using it anywhere I decided not to worry about it yet.
+//    private List<MultipartEntity> multipartEntities;
 
 
     public RequestOptions(String url) {
         this.url = url;
     }
 
-    public HttpClient getClient() {
+    public HttpAsyncClient getClient() {
         return client;
     }
-    public RequestOptions setClient(HttpClient client) {
+    public RequestOptions setClient(HttpAsyncClient client) {
         this.client = client;
         return this;
     }
@@ -115,17 +116,17 @@ public class RequestOptions {
         return this;
     }
 
-    public IFilter getFilter() {
-        return filter;
-    }
-    public RequestOptions setFilter(IFilter filter) {
-        this.filter = filter;
-        return this;
-    }
-
-    public ExecutorService getWorkerPool() {
-        return workerPool;
-    }
+//    public IFilter getFilter() {
+//        return filter;
+//    }
+//    public RequestOptions setFilter(IFilter filter) {
+//        this.filter = filter;
+//        return this;
+//    }
+//
+//    public ExecutorService getWorkerPool() {
+//        return workerPool;
+//    }
 
     public Promise<HttpResponse> getPromise() {
         return this.promise;
@@ -247,12 +248,12 @@ public class RequestOptions {
         return this;
     }
 
-    public List<MultipartEntity> getMultipartEntities() {
-        return multipartEntities;
-    }
-    public RequestOptions setMultipartEntities(List<MultipartEntity> entities) {
-        this.multipartEntities = entities;
-        return this;
-    }
+//    public List<MultipartEntity> getMultipartEntities() {
+//        return multipartEntities;
+//    }
+//    public RequestOptions setMultipartEntities(List<MultipartEntity> entities) {
+//        this.multipartEntities = entities;
+//        return this;
+//    }
 
 }
