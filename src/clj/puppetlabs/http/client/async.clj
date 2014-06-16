@@ -1,6 +1,5 @@
-;; This namespace is a thin wrapper around the http client functionality provided
-;; by org.httpkit.client. It makes SSL configuration more flexible, and allows
-;; the use of PEM files.
+;; This namespace is a wrapper around the http client functionality provided
+;; by Apache HttpAsyncClient. It allows the use of PEM files for HTTPS configuration.
 ;;
 ;; In the options to any request method, an existing SSLContext object can be
 ;; supplied under :ssl-context. If this is present it will be used. If it's
@@ -13,11 +12,16 @@
 ;; these methods.
 
 (ns puppetlabs.http.client.async
-  (:require [org.httpkit.client :as http]
-            [puppetlabs.certificate-authority.core :as ssl])
+  (:import (com.puppetlabs.http.client HttpMethod HttpClientException)
+           (org.apache.http.nio.client HttpAsyncClient)
+           (org.apache.http.impl.nio.client HttpAsyncClients)
+           (org.apache.http.client.methods HttpGet)
+           (org.apache.http.concurrent FutureCallback))
+  (:require [puppetlabs.certificate-authority.core :as ssl])
   (:refer-clojure :exclude (get)))
 
-;; SSL configuration functions
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Private SSL configuration functions
 
 (defn- initialize-ssl-context-from-pems
   [req]
@@ -35,49 +39,152 @@
                             (:ssl-ca-cert req)))
       (dissoc :ssl-ca-cert)))
 
-(defn- configure-ssl-from-context
-  "Configures an SSLEngine in the request starting from an SSLContext"
-  [req]
-  (-> req
-    (assoc :sslengine (.createSSLEngine (:ssl-context req)))
-    (dissoc :ssl-context)))
+;(defn- configure-ssl-from-context
+;  "Configures an SSLEngine in the request starting from an SSLContext"
+;  [req]
+;  (-> req
+;    (assoc :ssl-engine (.createSSLEngine (:ssl-context req)))
+;    (dissoc :ssl-context)))
 
 (defn- configure-ssl-from-pems
   "Configures an SSLEngine in the request starting from a set of PEM files"
   [req]
   (-> req
-    initialize-ssl-context-from-pems
-    configure-ssl-from-context))
+      initialize-ssl-context-from-pems
+      ;configure-ssl-from-context
+      ))
 
 (defn- configure-ssl-from-ca-pem
   "Configures an SSLEngine in the request starting from a CA PEM file"
   [req]
   (-> req
       initialize-ssl-context-from-ca-pem
-      configure-ssl-from-context))
+      ;configure-ssl-from-context
+      ))
 
 (defn configure-ssl
-  "Configures a request map to have an SSLEngine. It will use an existing one
-  if already present, , then use an SSLContext (stored in :ssl-context) if
-  that is present, and will fall back to a set of PEM files (stored in
-  :ssl-cert, :ssl-key, and :ssl-ca-cert) if those are present. If none of
-  these are present this does not modify the request map."
+  "Configures a request map to have an SSLContext. It will use an existing one
+  (stored in :ssl-context) if already present, and will fall back to a set of
+  PEM files (stored in :ssl-cert, :ssl-key, and :ssl-ca-cert) if those are present.
+  If none of these are present this does not modify the request map."
   [req]
   (cond
-    (:sslengine req) req
-    (:ssl-context req) (configure-ssl-from-context req)
+    ;(:ssl-engine req) req
+    ;(:ssl-context req) (configure-ssl-from-context req)
+    (:ssl-context req) req
     (every? (partial req) [:ssl-cert :ssl-key :ssl-ca-cert]) (configure-ssl-from-pems req)
     (:ssl-ca-cert req) (configure-ssl-from-ca-pem req)
     :else req))
 
-(defn- check-url! [url]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Private utility functions
+
+(defn- check-url!
+  [url]
   (when (nil? url)
-     (throw (IllegalArgumentException. "Host URL cannot be nil"))))
+    (throw (IllegalArgumentException. "Host URL cannot be nil"))))
+
+(defn- build-request
+  [opts]
+  (condp = (:method opts)
+    :get (HttpGet. (:url opts))
+    (throw (IllegalArgumentException. ("Unsupported request method: %s" (:method opts))))))
+
+(defn get-headers
+  [http-response]
+  (reduce
+    (fn [acc h]
+      (assoc acc (.getName h) (.getValue h)))
+    {}
+    (.getAllHeaders http-response)))
+
+(defn- response-map
+  [opts http-response]
+  {:opts    opts
+   :status  (.. http-response getStatusLine getStatusCode)
+   :headers (get-headers http-response)
+   :body    (.. http-response getEntity getContent)})
+
+(defn- deliver-result
+  [client result opts callback response]
+  (try
+    (deliver result
+             (if callback
+               (try
+                 (callback response)
+                 (catch Exception e
+                   {:opts  opts
+                    :error e}))
+              response))
+    (finally
+      (.close client))))
+
+(defn- future-callback
+  [client result opts callback]
+  (reify FutureCallback
+    (completed [this http-response]
+      (let [response (response-map opts http-response)]
+        (deliver-result client result opts callback response)))
+    (failed [this e]
+      (deliver-result client result opts callback
+                      {:opts opts :error e}))
+    (cancelled [this]
+      (deliver-result client result opts callback
+                      {:opts  opts
+                       :error (HttpClientException. "Request cancelled")}))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Public
+
+(defn create-client
+  [opts]
+  (let [opts    (configure-ssl opts)
+        client  (if (:ssl-context opts)
+                  (.. (HttpAsyncClients/custom) (setSSLContext (:ssl-context opts)) build)
+                  (HttpAsyncClients/createDefault))]
+    (.start client)
+    client))
 
 (defn request
+  "Issues an async HTTP request and returns a promise object to which the value
+  of `(callback {:opts _ :status _ :headers _ :body _})` or
+     `(callback {:opts _ :error _})` will be delivered.
+
+  When unspecified, `callback` is the identity function.
+
+  Request options:
+
+  * :url
+  * :method - the HTTP method (:get, :head, :post, :put, :delete, :options, :patch
+  * :headers - a map of headers
+  * :body - the body; may be a String or any type supported by clojure's reader
+
+  SSL options:
+
+  * :ssl-context - an instance of SSLContext
+
+  OR
+
+  * :ssl-cert - path to a PEM file containing the client cert
+  * :ssl-key - path to a PEM file containing the client private key
+  * :ssl-ca-cert - path to a PEM file containing the CA cert"
   [opts callback]
   (check-url! (:url opts))
-  (http/request (configure-ssl opts) callback))
+  ;
+  ;(let [response (JavaClient/request (configure-ssl opts))]
+  ;  ;http/request (configure-ssl opts) callback
+  ;  ;
+  ;  )
+  #_(JavaClient/request (configure-ssl opts)
+                      (proxy [IResponseCallback] []
+                        (handleResponse [resp]
+                          (callback resp))))
+  (let [client  (create-client opts)
+        request (build-request opts)
+        result  (promise)]
+    (.execute client request
+              (future-callback client result opts callback))
+    result))
 
 (defn- wrap-with-ssl-config
   [method]
@@ -96,28 +203,28 @@
 
 (def ^{:arglists '([url] [url callback-or-opts] [url opts callback])} get
   "Issue an async HTTP GET request."
-  (wrap-with-ssl-config http/get))
+  (wrap-with-ssl-config :get))
 
 (def ^{:arglists '([url] [url callback-or-opts] [url opts callback])} head
   "Issue an async HTTP HEAD request."
-  (wrap-with-ssl-config http/head))
+  (wrap-with-ssl-config :head))
 
 (def ^{:arglists '([url] [url callback-or-opts] [url opts callback])} post
   "Issue an async HTTP POST request."
-  (wrap-with-ssl-config http/post))
+  (wrap-with-ssl-config :post))
 
 (def ^{:arglists '([url] [url callback-or-opts] [url opts callback])} put
   "Issue an async HTTP PUT request."
-  (wrap-with-ssl-config http/put))
+  (wrap-with-ssl-config :put))
 
 (def ^{:arglists '([url] [url callback-or-opts] [url opts callback])} delete
   "Issue an async HTTP DELETE request."
-  (wrap-with-ssl-config http/delete))
+  (wrap-with-ssl-config :delete))
 
 (def ^{:arglists '([url] [url callback-or-opts] [url opts callback])} options
   "Issue an async HTTP OPTIONS request."
-  (wrap-with-ssl-config http/options))
+  (wrap-with-ssl-config :options))
 
 (def ^{:arglists '([url] [url callback-or-opts] [url opts callback])} patch
   "Issue an async HTTP PATCH request."
-  (wrap-with-ssl-config http/patch))
+  (wrap-with-ssl-config :patch))

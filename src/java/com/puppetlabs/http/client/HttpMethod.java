@@ -1,8 +1,5 @@
 package com.puppetlabs.http.client;
 
-// This is really dumb, but I didn't want to leak the HTTPKit class into the
-// API for now.
-
 import org.apache.http.client.methods.*;
 
 public enum HttpMethod {

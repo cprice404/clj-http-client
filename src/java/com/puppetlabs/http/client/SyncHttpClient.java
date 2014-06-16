@@ -23,20 +23,24 @@ public class SyncHttpClient {
         throw new HttpClientException(msg, t);
     }
 
-    private static RequestOptions configureSslFromContext(RequestOptions options) {
-        options.setSslEngine(options.getSslContext().createSSLEngine());
-        options.setSslContext(null);
-        return options;
-    }
+//    private static RequestOptions configureSslFromContext(RequestOptions options) {
+//        options.setSslEngine(options.getSslContext().createSSLEngine());
+//        options.setSslContext(null);
+//        return options;
+//    }
 
     // TODO: move this into the async java API if we ever add one
     private static RequestOptions configureSsl(RequestOptions options) {
-        if (options.getSslEngine() != null) {
-            return options;
-        }
+//        if (options.getSslEngine() != null) {
+//            return options;
+//        }
+
+//        if (options.getSslContext() != null) {
+//            return configureSslFromContext(options);
+//        }
 
         if (options.getSslContext() != null) {
-            return configureSslFromContext(options);
+            return options;
         }
 
         if ((options.getSslCert() != null) &&
@@ -65,7 +69,8 @@ public class SyncHttpClient {
             options.setSslCert(null);
             options.setSslKey(null);
             options.setSslCaCert(null);
-            return configureSslFromContext(options);
+//            return configureSslFromContext(options);
+            return options;
         }
 
         if (options.getSslCaCert() != null) {
@@ -86,7 +91,8 @@ public class SyncHttpClient {
                 logAndRethrow("Error while configuring SSL", e);
             }
             options.setSslCaCert(null);
-            return configureSslFromContext(options);
+//            return configureSslFromContext(options);
+            return options;
         }
 
         return options;
@@ -99,13 +105,8 @@ public class SyncHttpClient {
 
         options = configureSsl(options);
 
-        Promise<HttpResponse> promise = null;
-        try {
-            promise = JavaClient.request(options, null);
-        } catch (IOException e) {
-            logAndRethrow("Error submitting http request", e);
+        Promise<HttpResponse> promise =  JavaClient.request(options, null);
 
-        }
         HttpResponse response = null;
         try {
             response = promise.deref();

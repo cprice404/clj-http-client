@@ -1,6 +1,5 @@
 package com.puppetlabs.http.client;
 
-import com.puppetlabs.http.client.HttpResponse;
 import com.puppetlabs.http.client.RequestOptions;
 
 import java.util.Map;
@@ -9,7 +8,7 @@ public class HttpResponse {
     private RequestOptions options;
     private Throwable error;
     private Object body;
-    private Map<String, Object> headers;
+    private Map<String, String> headers;
     private Integer status;
 
     public HttpResponse(RequestOptions options, Throwable error) {
@@ -17,7 +16,7 @@ public class HttpResponse {
         this.error = error;
     }
 
-    public HttpResponse(RequestOptions options, Object body, Map<String, Object> headers, int status) {
+    public HttpResponse(RequestOptions options, Object body, Map<String, String> headers, int status) {
         this.options = options;
         this.body = body;
         this.headers = headers;
@@ -36,7 +35,7 @@ public class HttpResponse {
         return body;
     }
 
-    public Map<String, Object> getHeaders() {
+    public Map<String, String> getHeaders() {
         return headers;
     }
 

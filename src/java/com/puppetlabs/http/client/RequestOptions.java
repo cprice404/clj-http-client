@@ -23,20 +23,20 @@ public class RequestOptions {
 //    // but since we're not using it anywhere I decided not to worry about it yet.
 //    private IFilter filter = IFilter.ACCEPT_ALL;
 //    private ExecutorService workerPool = DefaultWorkerPool.getInstance();
-    private Promise<HttpResponse> promise = new Promise<HttpResponse>();
+//    private Promise<HttpResponse> promise = new Promise<HttpResponse>();
     private int keepalive = 120000;
     private ResponseBodyType as = ResponseBodyType.AUTO;
 
     private String url;
     private HttpMethod method = null;
-    private List<String> traceRedirects = new ArrayList<String>();
+//    private List<String> traceRedirects = new ArrayList<String>();
     private Map<String, Object> headers;
     private Map<String, String> formParams;
     private BasicAuth basicAuth;
     private String oauthToken;
     private String userAgent;
     private Map<String, String> queryParams;
-    private SSLEngine sslEngine;
+//    private SSLEngine sslEngine;
     private SSLContext sslContext;
     private String sslCert;
     private String sslKey;
@@ -128,21 +128,21 @@ public class RequestOptions {
 //        return workerPool;
 //    }
 
-    public Promise<HttpResponse> getPromise() {
-        return this.promise;
-    }
-    public RequestOptions setPromise(Promise<HttpResponse> promise) {
-        this.promise = promise;
-        return this;
-    }
+//    public Promise<HttpResponse> getPromise() {
+//        return this.promise;
+//    }
+//    public RequestOptions setPromise(Promise<HttpResponse> promise) {
+//        this.promise = promise;
+//        return this;
+//    }
 
-    public List<String> getTraceRedirects() {
-        return traceRedirects;
-    }
-    public RequestOptions addTraceRedirect(String url) {
-        traceRedirects.add(url);
-        return this;
-    }
+//    public List<String> getTraceRedirects() {
+//        return traceRedirects;
+//    }
+//    public RequestOptions addTraceRedirect(String url) {
+//        traceRedirects.add(url);
+//        return this;
+//    }
 
     public Map<String, Object> getHeaders() {
         return headers;
@@ -189,14 +189,6 @@ public class RequestOptions {
     }
     public RequestOptions setQueryParams(Map<String, String> queryParams) {
         this.queryParams = queryParams;
-        return this;
-    }
-
-    public SSLEngine getSslEngine() {
-        return sslEngine;
-    }
-    public RequestOptions setSslEngine(SSLEngine sslEngine) {
-        this.sslEngine = sslEngine;
         return this;
     }
 
