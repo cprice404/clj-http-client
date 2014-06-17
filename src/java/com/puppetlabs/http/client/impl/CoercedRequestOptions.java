@@ -2,22 +2,22 @@ package com.puppetlabs.http.client.impl;
 
 import com.puppetlabs.http.client.HttpMethod;
 import org.apache.http.Header;
+import org.apache.http.HttpEntity;
 
 import javax.net.ssl.SSLContext;
-import java.util.Map;
 
 public class CoercedRequestOptions {
     private final String url;
     private final HttpMethod method;
     private final Header[] headers;
-    private final Object body;
+    private final HttpEntity body;
     private final SSLContext sslContext;
 
 
     public CoercedRequestOptions(String url,
                                  HttpMethod method,
                                  Header[] headers,
-                                 Object body,
+                                 HttpEntity body,
                                  SSLContext sslContext) {
         this.url = url;
         this.method = method;
@@ -38,7 +38,7 @@ public class CoercedRequestOptions {
         return headers;
     }
 
-    public Object getBody() {
+    public HttpEntity getBody() {
         return body;
     }
 

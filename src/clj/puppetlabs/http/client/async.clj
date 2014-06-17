@@ -18,7 +18,10 @@
            (org.apache.http.client.methods HttpGet HttpHead HttpPost HttpPut HttpTrace HttpDelete HttpOptions HttpPatch)
            (org.apache.http.concurrent FutureCallback)
            (org.apache.http.message BasicHeader)
-           (org.apache.http Header))
+           (org.apache.http Header)
+           (org.apache.http.nio.entity NStringEntity)
+           (org.apache.http.entity InputStreamEntity)
+           (java.io InputStream))
   (:require [puppetlabs.certificate-authority.core :as ssl])
   (:refer-clojure :exclude (get)))
 
@@ -78,11 +81,14 @@
     (map #(BasicHeader. (first %) (second %)) headers)))
 
 (defn- coerce-opts
-  [opts]
-  {:url     (:url opts)
+  [{:keys [url headers body] :as opts}]
+  {:url     url
    :method  (clojure.core/get opts :method :get)
-   :headers (prepare-headers (:headers opts))
-   :body    (:body opts)})
+   :headers (prepare-headers headers)
+   :body    (cond
+              (string? body) (NStringEntity. body)
+              (instance? InputStream body) (InputStreamEntity. body)
+              :else body)})
 
 (defn- construct-request
   [method url]
@@ -180,10 +186,12 @@
   [opts callback]
   (check-url! (:url opts))
   (let [client        (create-client opts)
-        {:keys [method url] :as coerced-opts} (coerce-opts opts)
+        {:keys [method url body] :as coerced-opts} (coerce-opts opts)
         request       (construct-request method url)
         result        (promise)]
     (.setHeaders request (:headers coerced-opts))
+    (when body
+      (.setEntity request body))
     (.execute client request
               (future-callback client result opts callback))
     result))

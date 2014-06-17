@@ -9,13 +9,17 @@ import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.*;
 import org.apache.http.concurrent.FutureCallback;
+import org.apache.http.entity.BasicHttpEntity;
+import org.apache.http.entity.InputStreamEntity;
 import org.apache.http.impl.nio.client.CloseableHttpAsyncClient;
 import org.apache.http.impl.nio.client.HttpAsyncClients;
 import org.apache.http.message.BasicHeader;
+import org.apache.http.nio.entity.NStringEntity;
 
 import javax.net.ssl.*;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
@@ -56,7 +60,17 @@ public class JavaClient {
 
         Header[] headers = prepareHeaders(options);
 
-        Object body = options.getBody();
+        HttpEntity body = null;
+
+        if (options.getBody() instanceof String) {
+            try {
+                body = new NStringEntity((String)options.getBody());
+            } catch (UnsupportedEncodingException e) {
+                throw new HttpClientException("Unable to create request body", e);
+            }
+        } else if (options.getBody() instanceof InputStream) {
+            body = new InputStreamEntity((InputStream)options.getBody());
+        }
 
         return new CoercedRequestOptions(url, method, headers, body, sslContext);
     }
@@ -97,7 +111,8 @@ public class JavaClient {
 
         final CloseableHttpAsyncClient client = createClient(coercedOptions);
 
-        HttpRequestBase request = constructRequest(coercedOptions.getMethod(), coercedOptions.getUrl());
+        HttpRequestBase request = constructRequest(coercedOptions.getMethod(),
+                coercedOptions.getUrl(), coercedOptions.getBody());
         request.setHeaders(coercedOptions.getHeaders());
 
         final Promise<HttpResponse> promise = new Promise<HttpResponse>();
@@ -168,26 +183,40 @@ public class JavaClient {
         }
     }
 
-    private static HttpRequestBase constructRequest(HttpMethod httpMethod, String url) {
+    private static HttpRequestBase constructRequest(HttpMethod httpMethod, String url, HttpEntity body) {
         switch (httpMethod) {
             case GET:
-                return new HttpGet(url);
+                return requestWithNoBody(new HttpGet(url), body, httpMethod);
             case HEAD:
-                return new HttpHead(url);
+                return requestWithNoBody(new HttpHead(url), body, httpMethod);
             case POST:
-                return new HttpPost(url);
+                return requestWithBody(new HttpPost(url), body);
             case PUT:
-                return new HttpPut(url);
+                return requestWithBody(new HttpPut(url), body);
             case DELETE:
-                return new HttpDelete(url);
+                return requestWithNoBody(new HttpDelete(url), body, httpMethod);
             case TRACE:
-                return new HttpTrace(url);
+                return requestWithNoBody(new HttpTrace(url), body, httpMethod);
             case OPTIONS:
-                return new HttpOptions(url);
+                return requestWithNoBody(new HttpOptions(url), body, httpMethod);
             case PATCH:
-                return new HttpPatch(url);
+                return requestWithBody(new HttpPatch(url), body);
             default:
                 throw new HttpClientException("Unable to construct request for:" + httpMethod + ", " + url, null);
         }
+    }
+
+    private static HttpRequestBase requestWithBody(HttpEntityEnclosingRequestBase request, HttpEntity body) {
+        if (body != null) {
+            request.setEntity(body);
+        }
+        return request;
+    }
+
+    private static HttpRequestBase requestWithNoBody(HttpRequestBase request, Object body, HttpMethod httpMethod) {
+        if (body != null) {
+            throw new HttpClientException("Request of type " + httpMethod + " does not support 'body'!");
+        }
+        return request;
     }
 }

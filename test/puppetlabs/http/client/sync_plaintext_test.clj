@@ -1,7 +1,9 @@
 (ns puppetlabs.http.client.sync-plaintext-test
   (:import (com.puppetlabs.http.client SyncHttpClient RequestOptions
                                        HttpClientException)
-           (javax.net.ssl SSLHandshakeException))
+           (javax.net.ssl SSLHandshakeException)
+           (java.io ByteArrayInputStream)
+           (java.nio.charset Charset))
   (:require [clojure.test :refer :all]
             [puppetlabs.trapperkeeper.core :as tk]
             [puppetlabs.trapperkeeper.testutils.bootstrap :as testutils]
@@ -103,3 +105,35 @@
           (is (= 200 (:status response)))
           (is (= "foo" (slurp (:body response))))
           (is (= "foo" (get-in response [:headers "myrespheader"]))))))))
+
+(defn req-body-app
+  [req]
+  {:status  200
+   :body    (slurp (:body req))})
+
+(tk/defservice test-body-web-service
+               [[:WebserverService add-ring-handler]]
+               (init [this context]
+                     (add-ring-handler req-body-app "/hello")
+                     context))
+
+(deftest sync-client-request-headers-test
+  (testlogging/with-test-logging
+    (testutils/with-app-with-config req-body-app
+      [jetty9/jetty9-service test-body-web-service]
+      {:webserver {:port 10000}}
+      (testing "java sync client: string body for post request"
+        (let [options (-> (RequestOptions. "http://localhost:10000/hello/")
+                          (.setBody "foo"))
+              response (SyncHttpClient/post options)]
+          (is (= 200 (.getStatus response)))
+          (is (= "foo" (slurp (.getBody response)))))
+        (let [options (-> (RequestOptions. "http://localhost:10000/hello/")
+                          (.setBody (ByteArrayInputStream. (.getBytes "foo" "UTF-8"))))
+              response (SyncHttpClient/post options)]
+          (is (= 200 (.getStatus response)))
+          (is (= "foo" (slurp (.getBody response))))))
+      (testing "clojure sync client: string body for post request"
+        (let [response (sync/post "http://localhost:10000/hello/" {:body (ByteArrayInputStream. (.getBytes "foo" "UTF-8"))})]
+          (is (= 200 (:status response)))
+          (is (= "foo" (slurp (:body response)))))))))
