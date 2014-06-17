@@ -180,6 +180,8 @@ public class JavaClient {
                 return new HttpTrace(coercedOptions.getUrl());
             case OPTIONS:
                 return new HttpOptions(coercedOptions.getUrl());
+            case PATCH:
+                return new HttpPatch(coercedOptions.getUrl());
             default:
                 throw new HttpClientException("Unable to construct request for:" + coercedOptions.getMethod() + ", " + coercedOptions.getUrl(), null);
         }

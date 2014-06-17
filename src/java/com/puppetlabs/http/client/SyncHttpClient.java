@@ -152,4 +152,11 @@ public class SyncHttpClient {
     public static HttpResponse options(RequestOptions requestOptions) {
         return request(requestOptions.setMethod(HttpMethod.OPTIONS));
     }
+
+    public static HttpResponse patch(String url) {
+        return patch(new RequestOptions(url));
+    }
+    public static HttpResponse patch(RequestOptions requestOptions) {
+        return request(requestOptions.setMethod(HttpMethod.PATCH));
+    }
 }
