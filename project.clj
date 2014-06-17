@@ -1,7 +1,7 @@
-(def ks-version "0.6.0")
-(def tk-version "0.3.10")
+(def ks-version "0.7.1")
+(def tk-version "0.4.2")
 
-(defproject puppetlabs/http-client "0.1.8-SNAPSHOT"
+(defproject puppetlabs/http-client "0.2.0-SNAPSHOT"
   :description "HTTP client wrapper"
   :license {:name "Apache License, Version 2.0"
             :url "http://www.apache.org/licenses/LICENSE-2.0.html"}

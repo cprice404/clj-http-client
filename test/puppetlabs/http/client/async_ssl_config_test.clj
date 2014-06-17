@@ -1,4 +1,4 @@
-(ns puppetlabs.http.client.async-test
+(ns puppetlabs.http.client.async-ssl-config-test
   (:require [clojure.test :refer :all]
             [clojure.java.io :refer [resource]] 
             [puppetlabs.certificate-authority.core :as ssl]

@@ -15,7 +15,7 @@
   (:import (com.puppetlabs.http.client HttpMethod HttpClientException)
            (org.apache.http.nio.client HttpAsyncClient)
            (org.apache.http.impl.nio.client HttpAsyncClients)
-           (org.apache.http.client.methods HttpGet)
+           (org.apache.http.client.methods HttpGet HttpHead)
            (org.apache.http.concurrent FutureCallback))
   (:require [puppetlabs.certificate-authority.core :as ssl])
   (:refer-clojure :exclude (get)))
@@ -72,8 +72,9 @@
 (defn- build-request
   [opts]
   (condp = (:method opts)
-    :get (HttpGet. (:url opts))
-    (throw (IllegalArgumentException. ("Unsupported request method: %s" (:method opts))))))
+    :get    (HttpGet. (:url opts))
+    :head   (HttpHead. (:url opts))
+    (throw (IllegalArgumentException. (format "Unsupported request method: %s" (:method opts))))))
 
 (defn get-headers
   [http-response]
@@ -88,7 +89,8 @@
   {:opts    opts
    :status  (.. http-response getStatusLine getStatusCode)
    :headers (get-headers http-response)
-   :body    (.. http-response getEntity getContent)})
+   :body    (when-let [entity (.getEntity http-response)]
+              (.getContent entity))})
 
 (defn- deliver-result
   [client result opts callback response]
