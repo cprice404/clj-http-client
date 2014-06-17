@@ -107,7 +107,6 @@ public class SyncHttpClient {
     public static HttpResponse get(String url) {
         return get(new RequestOptions(url));
     }
-
     public static HttpResponse get(RequestOptions requestOptions) {
         return request(requestOptions.setMethod(HttpMethod.GET));
     }
@@ -115,7 +114,6 @@ public class SyncHttpClient {
     public static HttpResponse head(String url) {
         return head(new RequestOptions(url));
     }
-
     public static HttpResponse head(RequestOptions requestOptions) {
         return request(requestOptions.setMethod(HttpMethod.HEAD));
     }
@@ -123,7 +121,6 @@ public class SyncHttpClient {
     public static HttpResponse post(String url) {
         return post(new RequestOptions(url));
     }
-
     public static HttpResponse post(RequestOptions requestOptions) {
         return request(requestOptions.setMethod(HttpMethod.POST));
     }
@@ -131,8 +128,15 @@ public class SyncHttpClient {
     public static HttpResponse put(String url) {
         return post(new RequestOptions(url));
     }
-
     public static HttpResponse put(RequestOptions requestOptions) {
         return request(requestOptions.setMethod(HttpMethod.PUT));
     }
+
+    public static HttpResponse delete(String url) {
+        return post(new RequestOptions(url));
+    }
+    public static HttpResponse delete(RequestOptions requestOptions) {
+        return request(requestOptions.setMethod(HttpMethod.DELETE));
+    }
+
 }

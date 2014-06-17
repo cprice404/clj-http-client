@@ -174,6 +174,8 @@ public class JavaClient {
                 return new HttpPost(coercedOptions.getUrl());
             case PUT:
                 return new HttpPut(coercedOptions.getUrl());
+            case DELETE:
+                return new HttpDelete(coercedOptions.getUrl());
             default:
                 throw new HttpClientException("Unable to construct request for:" + coercedOptions.getMethod() + ", " + coercedOptions.getUrl(), null);
         }

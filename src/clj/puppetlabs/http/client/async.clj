@@ -76,6 +76,7 @@
     :head   (HttpHead. (:url opts))
     :post   (HttpPost. (:url opts))
     :put    (HttpPut. (:url opts))
+    :delete (HttpPut. (:url opts))
     (throw (IllegalArgumentException. (format "Unsupported request method: %s" (:method opts))))))
 
 (defn get-headers
