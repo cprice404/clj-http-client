@@ -127,4 +127,12 @@ public class SyncHttpClient {
     public static HttpResponse post(RequestOptions requestOptions) {
         return request(requestOptions.setMethod(HttpMethod.POST));
     }
+
+    public static HttpResponse put(String url) {
+        return post(new RequestOptions(url));
+    }
+
+    public static HttpResponse put(RequestOptions requestOptions) {
+        return request(requestOptions.setMethod(HttpMethod.PUT));
+    }
 }

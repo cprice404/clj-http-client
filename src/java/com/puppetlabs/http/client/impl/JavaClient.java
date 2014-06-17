@@ -7,9 +7,7 @@ import com.puppetlabs.http.client.RequestOptions;
 
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpHead;
-import org.apache.http.client.methods.HttpRequestBase;
+import org.apache.http.client.methods.*;
 import org.apache.http.concurrent.FutureCallback;
 import org.apache.http.impl.nio.client.CloseableHttpAsyncClient;
 import org.apache.http.impl.nio.client.HttpAsyncClients;
@@ -172,6 +170,10 @@ public class JavaClient {
                 return new HttpGet(coercedOptions.getUrl());
             case HEAD:
                 return new HttpHead(coercedOptions.getUrl());
+            case POST:
+                return new HttpPost(coercedOptions.getUrl());
+            case PUT:
+                return new HttpPut(coercedOptions.getUrl());
             default:
                 throw new HttpClientException("Unable to construct request for:" + coercedOptions.getMethod() + ", " + coercedOptions.getUrl(), null);
         }

@@ -49,3 +49,33 @@
         (let [response (sync/head "http://localhost:10000/hello/")]
           (is (= 200 (:status response)))
           (is (= nil (:body response))))))))
+
+(deftest sync-client-post-test
+  (testlogging/with-test-logging
+    (testutils/with-app-with-config app
+      [jetty9/jetty9-service test-web-service]
+      {:webserver {:port 10000}}
+      (testing "java sync client"
+        (let [options (RequestOptions. "http://localhost:10000/hello/")
+              response (SyncHttpClient/post options)]
+          (is (= 200 (.getStatus response)))
+          (is (= "Hello, World!" (slurp (.getBody response))))))
+      (testing "clojure sync client"
+        (let [response (sync/post "http://localhost:10000/hello/")]
+          (is (= 200 (:status response)))
+          (is (= "Hello, World!" (slurp (:body response)))))))))
+
+(deftest sync-client-put-test
+  (testlogging/with-test-logging
+    (testutils/with-app-with-config app
+      [jetty9/jetty9-service test-web-service]
+      {:webserver {:port 10000}}
+      (testing "java sync client"
+        (let [options (RequestOptions. "http://localhost:10000/hello/")
+              response (SyncHttpClient/put options)]
+          (is (= 200 (.getStatus response)))
+          (is (= "Hello, World!" (slurp (.getBody response))))))
+      (testing "clojure sync client"
+        (let [response (sync/put "http://localhost:10000/hello/")]
+          (is (= 200 (:status response)))
+          (is (= "Hello, World!" (slurp (:body response)))))))))
