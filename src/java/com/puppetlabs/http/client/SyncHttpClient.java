@@ -126,24 +126,30 @@ public class SyncHttpClient {
     }
 
     public static HttpResponse put(String url) {
-        return post(new RequestOptions(url));
+        return put(new RequestOptions(url));
     }
     public static HttpResponse put(RequestOptions requestOptions) {
         return request(requestOptions.setMethod(HttpMethod.PUT));
     }
 
     public static HttpResponse delete(String url) {
-        return post(new RequestOptions(url));
+        return delete(new RequestOptions(url));
     }
     public static HttpResponse delete(RequestOptions requestOptions) {
         return request(requestOptions.setMethod(HttpMethod.DELETE));
     }
 
     public static HttpResponse trace(String url) {
-        return post(new RequestOptions(url));
+        return trace(new RequestOptions(url));
     }
     public static HttpResponse trace(RequestOptions requestOptions) {
         return request(requestOptions.setMethod(HttpMethod.TRACE));
     }
 
+    public static HttpResponse options(String url) {
+        return options(new RequestOptions(url));
+    }
+    public static HttpResponse options(RequestOptions requestOptions) {
+        return request(requestOptions.setMethod(HttpMethod.OPTIONS));
+    }
 }
