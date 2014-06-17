@@ -39,6 +39,9 @@ public class JavaClient {
             for (Map.Entry<String, String> entry : options.getHeaders().entrySet()) {
                 result.add(new BasicHeader(entry.getKey(), entry.getValue()));
             }
+            if (! options.getHeaders().containsKey("Accept-Encoding")) {
+                result.add(new BasicHeader("Accept-Encoding", "gzip, deflate"));
+            }
         }
         return result.toArray(new Header[result.size()]);
     }

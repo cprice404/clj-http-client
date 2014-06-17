@@ -78,7 +78,10 @@
   [headers]
   (into-array
     Header
-    (map #(BasicHeader. (first %) (second %)) headers)))
+    (let [headers (if (clojure.core/get headers "Accept-Encoding")
+                    headers
+                    (assoc headers "Accept-Encoding" "gzip, deflate"))]
+      (map #(BasicHeader. (first %) (second %)) headers))))
 
 (defn- coerce-opts
   [{:keys [url headers body] :as opts}]
