@@ -139,4 +139,11 @@ public class SyncHttpClient {
         return request(requestOptions.setMethod(HttpMethod.DELETE));
     }
 
+    public static HttpResponse trace(String url) {
+        return post(new RequestOptions(url));
+    }
+    public static HttpResponse trace(RequestOptions requestOptions) {
+        return request(requestOptions.setMethod(HttpMethod.TRACE));
+    }
+
 }

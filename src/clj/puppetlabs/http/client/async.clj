@@ -15,7 +15,7 @@
   (:import (com.puppetlabs.http.client HttpMethod HttpClientException)
            (org.apache.http.nio.client HttpAsyncClient)
            (org.apache.http.impl.nio.client HttpAsyncClients)
-           (org.apache.http.client.methods HttpGet HttpHead HttpPost HttpPut)
+           (org.apache.http.client.methods HttpGet HttpHead HttpPost HttpPut HttpTrace HttpDelete)
            (org.apache.http.concurrent FutureCallback))
   (:require [puppetlabs.certificate-authority.core :as ssl])
   (:refer-clojure :exclude (get)))
@@ -76,7 +76,8 @@
     :head   (HttpHead. (:url opts))
     :post   (HttpPost. (:url opts))
     :put    (HttpPut. (:url opts))
-    :delete (HttpPut. (:url opts))
+    :delete (HttpDelete. (:url opts))
+    :trace  (HttpTrace. (:url opts))
     (throw (IllegalArgumentException. (format "Unsupported request method: %s" (:method opts))))))
 
 (defn get-headers
