@@ -11,6 +11,7 @@ import org.apache.http.client.methods.*;
 import org.apache.http.concurrent.FutureCallback;
 import org.apache.http.impl.nio.client.CloseableHttpAsyncClient;
 import org.apache.http.impl.nio.client.HttpAsyncClients;
+import org.apache.http.message.BasicHeader;
 
 import javax.net.ssl.*;
 import java.io.IOException;
@@ -19,21 +20,23 @@ import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class JavaClient {
 
     private static final String PROTOCOL = "TLS";
 
-    private static Map<String, Object> prepareHeaders(RequestOptions options) {
-        Map<String, Object> result = new HashMap<String, Object>();
+    private static Header[] prepareHeaders(RequestOptions options) {
+        List<Header> result = new ArrayList<Header>();
         if (options.getHeaders() != null) {
-            for (Map.Entry<String, Object> entry : options.getHeaders().entrySet()) {
-                result.put(entry.getKey(), entry.getValue());
+            for (Map.Entry<String, String> entry : options.getHeaders().entrySet()) {
+                result.add(new BasicHeader(entry.getKey(), entry.getValue()));
             }
         }
-        return result;
+        return result.toArray(new Header[result.size()]);
     }
 
     private static CoercedRequestOptions coerceRequestOptions(RequestOptions options) {
@@ -51,7 +54,7 @@ public class JavaClient {
             method = HttpMethod.GET;
         }
 
-        Map<String, Object> headers = prepareHeaders(options);
+        Header[] headers = prepareHeaders(options);
 
         Object body = options.getBody();
 
@@ -94,7 +97,8 @@ public class JavaClient {
 
         final CloseableHttpAsyncClient client = createClient(coercedOptions);
 
-        HttpRequestBase request = buildRequest(coercedOptions);
+        HttpRequestBase request = constructRequest(coercedOptions.getMethod(), coercedOptions.getUrl());
+        request.setHeaders(coercedOptions.getHeaders());
 
         final Promise<HttpResponse> promise = new Promise<HttpResponse>();
 
@@ -164,26 +168,26 @@ public class JavaClient {
         }
     }
 
-    private static HttpRequestBase buildRequest(CoercedRequestOptions coercedOptions) {
-        switch (coercedOptions.getMethod()) {
+    private static HttpRequestBase constructRequest(HttpMethod httpMethod, String url) {
+        switch (httpMethod) {
             case GET:
-                return new HttpGet(coercedOptions.getUrl());
+                return new HttpGet(url);
             case HEAD:
-                return new HttpHead(coercedOptions.getUrl());
+                return new HttpHead(url);
             case POST:
-                return new HttpPost(coercedOptions.getUrl());
+                return new HttpPost(url);
             case PUT:
-                return new HttpPut(coercedOptions.getUrl());
+                return new HttpPut(url);
             case DELETE:
-                return new HttpDelete(coercedOptions.getUrl());
+                return new HttpDelete(url);
             case TRACE:
-                return new HttpTrace(coercedOptions.getUrl());
+                return new HttpTrace(url);
             case OPTIONS:
-                return new HttpOptions(coercedOptions.getUrl());
+                return new HttpOptions(url);
             case PATCH:
-                return new HttpPatch(coercedOptions.getUrl());
+                return new HttpPatch(url);
             default:
-                throw new HttpClientException("Unable to construct request for:" + coercedOptions.getMethod() + ", " + coercedOptions.getUrl(), null);
+                throw new HttpClientException("Unable to construct request for:" + httpMethod + ", " + url, null);
         }
     }
 }

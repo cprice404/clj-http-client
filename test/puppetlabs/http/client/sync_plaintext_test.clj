@@ -72,3 +72,34 @@
 
 (deftest sync-client-patch-test
   (basic-test "PATCH" #(SyncHttpClient/patch %) sync/patch))
+
+(defn header-app
+  [req]
+  (let [val (get-in req [:headers "fooheader"])]
+    {:status  200
+     :headers {"myrespheader" val}
+     :body    val}))
+
+(tk/defservice test-header-web-service
+  [[:WebserverService add-ring-handler]]
+  (init [this context]
+       (add-ring-handler header-app "/hello")
+       context))
+
+(deftest sync-client-request-headers-test
+  (testlogging/with-test-logging
+    (testutils/with-app-with-config header-app
+      [jetty9/jetty9-service test-header-web-service]
+      {:webserver {:port 10000}}
+      (testing "java sync client"
+        (let [options (-> (RequestOptions. "http://localhost:10000/hello/")
+                          (.setHeaders {"fooheader" "foo"}))
+              response (SyncHttpClient/post options)]
+          (is (= 200 (.getStatus response)))
+          (is (= "foo" (slurp (.getBody response))))
+          (is (= "foo" (-> (.getHeaders response) (.get "myrespheader"))))))
+      (testing "clojure sync client"
+        (let [response (sync/post "http://localhost:10000/hello/" {:headers {"fooheader" "foo"}})]
+          (is (= 200 (:status response)))
+          (is (= "foo" (slurp (:body response))))
+          (is (= "foo" (get-in response [:headers "myrespheader"]))))))))

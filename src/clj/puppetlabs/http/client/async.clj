@@ -16,7 +16,9 @@
            (org.apache.http.nio.client HttpAsyncClient)
            (org.apache.http.impl.nio.client HttpAsyncClients)
            (org.apache.http.client.methods HttpGet HttpHead HttpPost HttpPut HttpTrace HttpDelete HttpOptions HttpPatch)
-           (org.apache.http.concurrent FutureCallback))
+           (org.apache.http.concurrent FutureCallback)
+           (org.apache.http.message BasicHeader)
+           (org.apache.http Header))
   (:require [puppetlabs.certificate-authority.core :as ssl])
   (:refer-clojure :exclude (get)))
 
@@ -69,20 +71,33 @@
   (when (nil? url)
     (throw (IllegalArgumentException. "Host URL cannot be nil"))))
 
-(defn- build-request
-  [opts]
-  (condp = (:method opts)
-    :get    (HttpGet. (:url opts))
-    :head   (HttpHead. (:url opts))
-    :post   (HttpPost. (:url opts))
-    :put    (HttpPut. (:url opts))
-    :delete (HttpDelete. (:url opts))
-    :trace  (HttpTrace. (:url opts))
-    :options (HttpOptions. (:url opts))
-    :patch  (HttpPatch. (:url opts))
-    (throw (IllegalArgumentException. (format "Unsupported request method: %s" (:method opts))))))
+(defn prepare-headers
+  [headers]
+  (into-array
+    Header
+    (map #(BasicHeader. (first %) (second %)) headers)))
 
-(defn get-headers
+(defn- coerce-opts
+  [opts]
+  {:url     (:url opts)
+   :method  (clojure.core/get opts :method :get)
+   :headers (prepare-headers (:headers opts))
+   :body    (:body opts)})
+
+(defn- construct-request
+  [method url]
+  (condp = method
+    :get    (HttpGet. url)
+    :head   (HttpHead. url)
+    :post   (HttpPost. url)
+    :put    (HttpPut. url)
+    :delete (HttpDelete. url)
+    :trace  (HttpTrace. url)
+    :options (HttpOptions. url)
+    :patch  (HttpPatch. url)
+    (throw (IllegalArgumentException. (format "Unsupported request method: %s" method)))))
+
+(defn get-resp-headers
   [http-response]
   (reduce
     (fn [acc h]
@@ -94,7 +109,7 @@
   [opts http-response]
   {:opts    opts
    :status  (.. http-response getStatusLine getStatusCode)
-   :headers (get-headers http-response)
+   :headers (get-resp-headers http-response)
    :body    (when-let [entity (.getEntity http-response)]
               (.getContent entity))})
 
@@ -138,6 +153,7 @@
     (.start client)
     client))
 
+
 (defn request
   "Issues an async HTTP request and returns a promise object to which the value
   of `(callback {:opts _ :status _ :headers _ :body _})` or
@@ -163,9 +179,11 @@
   * :ssl-ca-cert - path to a PEM file containing the CA cert"
   [opts callback]
   (check-url! (:url opts))
-  (let [client  (create-client opts)
-        request (build-request opts)
-        result  (promise)]
+  (let [client        (create-client opts)
+        {:keys [method url] :as coerced-opts} (coerce-opts opts)
+        request       (construct-request method url)
+        result        (promise)]
+    (.setHeaders request (:headers coerced-opts))
     (.execute client request
               (future-callback client result opts callback))
     result))

@@ -19,7 +19,7 @@ public class RequestOptions {
 
     private String url;
     private HttpMethod method = null;
-    private Map<String, Object> headers;
+    private Map<String, String> headers;
     private SSLContext sslContext;
     private String sslCert;
     private String sslKey;
@@ -55,10 +55,10 @@ public class RequestOptions {
         return this;
     }
 
-    public Map<String, Object> getHeaders() {
+    public Map<String, String> getHeaders() {
         return headers;
     }
-    public RequestOptions setHeaders(Map<String, Object> headers) {
+    public RequestOptions setHeaders(Map<String, String> headers) {
         this.headers = headers;
         return this;
     }
