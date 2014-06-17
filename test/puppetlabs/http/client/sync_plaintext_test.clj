@@ -20,21 +20,6 @@
         (add-ring-handler app "/hello")
         context))
 
-(deftest sync-client-get-test
-  (testlogging/with-test-logging
-    (testutils/with-app-with-config app
-       [jetty9/jetty9-service test-web-service]
-       {:webserver {:port 10000}}
-       (testing "java sync client"
-         (let [options (RequestOptions. "http://localhost:10000/hello/")
-               response (SyncHttpClient/get options)]
-           (is (= 200 (.getStatus response)))
-           (is (= "Hello, World!" (slurp (.getBody response))))))
-       (testing "clojure sync client"
-         (let [response (sync/get "http://localhost:10000/hello/")]
-           (is (= 200 (:status response)))
-           (is (= "Hello, World!" (slurp (:body response)))))))))
-
 (deftest sync-client-head-test
   (testlogging/with-test-logging
     (testutils/with-app-with-config app
@@ -49,6 +34,21 @@
         (let [response (sync/head "http://localhost:10000/hello/")]
           (is (= 200 (:status response)))
           (is (= nil (:body response))))))))
+
+(deftest sync-client-get-test
+  (testlogging/with-test-logging
+    (testutils/with-app-with-config app
+       [jetty9/jetty9-service test-web-service]
+       {:webserver {:port 10000}}
+       (testing "java sync client"
+         (let [options (RequestOptions. "http://localhost:10000/hello/")
+               response (SyncHttpClient/get options)]
+           (is (= 200 (.getStatus response)))
+           (is (= "Hello, World!" (slurp (.getBody response))))))
+       (testing "clojure sync client"
+         (let [response (sync/get "http://localhost:10000/hello/")]
+           (is (= 200 (:status response)))
+           (is (= "Hello, World!" (slurp (:body response)))))))))
 
 (deftest sync-client-post-test
   (testlogging/with-test-logging
