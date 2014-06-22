@@ -1,14 +1,13 @@
 package com.puppetlabs.http.client.impl;
 
-import com.puppetlabs.http.client.HttpClientException;
-import com.puppetlabs.http.client.HttpMethod;
-import com.puppetlabs.http.client.HttpResponse;
-import com.puppetlabs.http.client.RequestOptions;
+import com.puppetlabs.http.client.*;
 
+import org.apache.commons.io.IOUtils;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.*;
 import org.apache.http.concurrent.FutureCallback;
+import org.apache.http.entity.ContentType;
 import org.apache.http.entity.InputStreamEntity;
 import org.apache.http.impl.nio.client.CloseableHttpAsyncClient;
 import org.apache.http.impl.nio.client.HttpAsyncClients;
@@ -124,7 +123,7 @@ public class JavaClient {
             @Override
             public void completed(org.apache.http.HttpResponse httpResponse) {
                 try {
-                    InputStream body = null;
+                    Object body = null;
                     HttpEntity entity = httpResponse.getEntity();
                     if (entity != null) {
                         body = entity.getContent();
@@ -135,9 +134,20 @@ public class JavaClient {
                     }
                     String origContentEncoding = headers.get("content-encoding");
                     if (options.getDecompressBody()) {
-                        body = decompress(body, headers);
+                        body = decompress((InputStream)body, headers);
                     }
-                    deliverResponse(client, options, new HttpResponse(options, origContentEncoding, body, headers, httpResponse.getStatusLine().getStatusCode()), callback, promise);
+                    ContentType contentType = null;
+                    if (headers.get("content-type") != null) {
+                        contentType = ContentType.parse(headers.get("content-type"));
+                    }
+                    if (options.getAs() != HttpResponseBodyType.STREAM) {
+                        body = coerceBodyType((InputStream)body, options.getAs(), contentType);
+                    }
+                    deliverResponse(client, options,
+                            new HttpResponse(options, origContentEncoding, body,
+                                    headers, httpResponse.getStatusLine().getStatusCode(),
+                                    contentType),
+                            callback, promise);
                 } catch (Exception e) {
                     deliverResponse(client, options, new HttpResponse(options, e), callback, promise);
                 }
@@ -243,4 +253,23 @@ public class JavaClient {
                 return compressed;
         }
     }
+
+    private static Object coerceBodyType(InputStream body, HttpResponseBodyType as,
+                                         ContentType contentType) {
+        switch (as) {
+            case TEXT:
+                String charset = "UTF-8";
+                if (contentType != null) {
+                    charset = contentType.getCharset().name();
+                }
+                try {
+                    return IOUtils.toString(body, charset);
+                } catch (IOException e) {
+                    throw new HttpClientException("Unable to read body as string", e);
+                }
+            default:
+                throw new HttpClientException("Unsupported body type: " + as);
+        }
+    }
+
 }

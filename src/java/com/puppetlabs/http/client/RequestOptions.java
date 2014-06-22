@@ -27,6 +27,7 @@ public class RequestOptions {
     private boolean insecure = false;
     private Object body;
     private boolean decompressBody = true;
+    private HttpResponseBodyType as = HttpResponseBodyType.STREAM;
 
     public RequestOptions(String url) {
         this.url = url;
@@ -115,6 +116,14 @@ public class RequestOptions {
     public boolean getDecompressBody() { return decompressBody; }
     public RequestOptions setDecompressBody(boolean decompressBody) {
         this.decompressBody = decompressBody;
+        return this;
+    }
+
+    public HttpResponseBodyType getAs() {
+        return as;
+    }
+    public RequestOptions setAs(HttpResponseBodyType as) {
+        this.as = as;
         return this;
     }
 }

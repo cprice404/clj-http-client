@@ -1,8 +1,8 @@
 (ns puppetlabs.http.client.sync-plaintext-test
   (:import (com.puppetlabs.http.client SyncHttpClient RequestOptions
-                                       HttpClientException)
+                                       HttpClientException HttpResponseBodyType)
            (javax.net.ssl SSLHandshakeException)
-           (java.io ByteArrayInputStream)
+           (java.io ByteArrayInputStream InputStream)
            (java.nio.charset Charset))
   (:require [clojure.test :refer :all]
             [puppetlabs.trapperkeeper.core :as tk]
@@ -74,6 +74,47 @@
 
 (deftest sync-client-patch-test
   (basic-test "PATCH" #(SyncHttpClient/patch %) sync/patch))
+
+(deftest sync-client-as-test
+  (testlogging/with-test-logging
+    (testutils/with-app-with-config app
+      [jetty9/jetty9-service test-web-service]
+      {:webserver {:port 10000}}
+      (testing "java sync client: :as unspecified"
+        (let [options (RequestOptions. "http://localhost:10000/hello/")
+              response (SyncHttpClient/get options)]
+          (is (= 200 (.getStatus response)))
+          (is (instance? InputStream (.getBody response)))
+          (is (= "Hello, World!" (slurp (.getBody response))))))
+      (testing "java sync client: :as :stream"
+        (let [options (.. (RequestOptions. "http://localhost:10000/hello/")
+                          (setAs HttpResponseBodyType/STREAM))
+              response (SyncHttpClient/get options)]
+          (is (= 200 (.getStatus response)))
+          (is (instance? InputStream (.getBody response)))
+          (is (= "Hello, World!" (slurp (.getBody response))))))
+      (testing "java sync client: :as :text"
+        (let [options (.. (RequestOptions. "http://localhost:10000/hello/")
+                          (setAs HttpResponseBodyType/TEXT))
+              response (SyncHttpClient/get options)]
+          (is (= 200 (.getStatus response)))
+          (is (string? (.getBody response)))
+          (is (= "Hello, World!" (.getBody response)))))
+      (testing "clojure sync client: :as unspecified"
+        (let [response (sync/get "http://localhost:10000/hello/")]
+          (is (= 200 (:status response)))
+          (is (instance? InputStream (:body response)))
+          (is (= "Hello, World!" (slurp (:body response))))))
+      (testing "clojure sync client: :as :stream"
+        (let [response (sync/get "http://localhost:10000/hello/" {:as :stream})]
+          (is (= 200 (:status response)))
+          (is (instance? InputStream (:body response)))
+          (is (= "Hello, World!" (slurp (:body response))))))
+      (testing "clojure sync client: :as :text"
+        (let [response (sync/get "http://localhost:10000/hello/" {:as :text})]
+          (is (= 200 (:status response)))
+          (is (string? (:body response)))
+          (is (= "Hello, World!" (:body response))))))))
 
 (defn header-app
   [req]

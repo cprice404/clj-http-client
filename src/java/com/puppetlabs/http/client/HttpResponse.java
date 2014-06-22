@@ -1,6 +1,7 @@
 package com.puppetlabs.http.client;
 
 import com.puppetlabs.http.client.RequestOptions;
+import org.apache.http.entity.ContentType;
 
 import java.util.Map;
 
@@ -11,18 +12,22 @@ public class HttpResponse {
     private Object body;
     private Map<String, String> headers;
     private Integer status;
+    private ContentType contentType;
 
     public HttpResponse(RequestOptions options, Throwable error) {
         this.options = options;
         this.error = error;
     }
 
-    public HttpResponse(RequestOptions options, String origContentEncoding, Object body, Map<String, String> headers, int status) {
+    public HttpResponse(RequestOptions options, String origContentEncoding,
+                        Object body, Map<String, String> headers, int status,
+                        ContentType contentType) {
         this.options = options;
         this.origContentEncoding = origContentEncoding;
         this.body = body;
         this.headers = headers;
         this.status = status;
+        this.contentType = contentType;
     }
 
     public RequestOptions getOptions() {
@@ -46,4 +51,6 @@ public class HttpResponse {
     public Integer getStatus() {
         return status;
     }
+
+    public ContentType getContentType() { return contentType; }
 }

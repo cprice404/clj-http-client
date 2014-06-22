@@ -20,7 +20,7 @@
            (org.apache.http.message BasicHeader)
            (org.apache.http Header)
            (org.apache.http.nio.entity NStringEntity)
-           (org.apache.http.entity InputStreamEntity)
+           (org.apache.http.entity InputStreamEntity ContentType)
            (java.io InputStream)
            (com.puppetlabs.http.client.impl Compression))
   (:require [puppetlabs.certificate-authority.core :as ssl]
@@ -103,6 +103,21 @@
   [resp]
   resp)
 
+(defn- parse-content-type
+  [content-type-header]
+  (if (empty? content-type-header)
+    {}
+    (let [content-type (ContentType/parse content-type-header)]
+      {:mime-type (.getMimeType content-type)
+       :charset   (.getCharset content-type)})))
+
+(defmulti coerce-body-type (fn [resp] (get-in resp [:opts :as])))
+
+(defmethod coerce-body-type :text
+  [resp]
+  (let [charset (or (get-in resp [:content-type-params :charset] "UTF-8"))]
+    (assoc resp :body (slurp (:body resp) :encoding charset))))
+
 (defn- response-map
   [opts http-response]
   (let [headers       (get-resp-headers http-response)
@@ -111,6 +126,7 @@
      :orig-content-encoding orig-encoding
      :status                (.. http-response getStatusLine getStatusCode)
      :headers               headers
+     :content-type          (parse-content-type (headers "content-type"))
      :body                  (when-let [entity (.getEntity http-response)]
                               (.getContent entity))}))
 
@@ -134,7 +150,8 @@
     (completed [this http-response]
       (try
         (let [response (cond-> (response-map opts http-response)
-                               (:decompress-body opts) (decompress))]
+                               (:decompress-body opts) (decompress)
+                               (not= :stream (:as opts)) (coerce-body-type))]
           (deliver-result client result opts callback response))
         (catch Exception e
           (deliver-result client result opts callback
@@ -230,6 +247,13 @@
   * :method - the HTTP method (:get, :head, :post, :put, :delete, :options, :patch
   * :headers - a map of headers
   * :body - the body; may be a String or any type supported by clojure's reader
+  * :decompress-body - if `true`, an 'accept-encoding' header with a value of
+       'gzip, deflate' will be added to the request, and the response will be
+       automatically decompressed if it contains a recognized 'content-encoding'
+       header.  defaults to `true`.
+    :as - used to control the data type of the response body.  Supported values are
+      `:text` and `:stream`, which will return a `String` or an `InputStream`,
+      respectively.  Defaults to `:stream`.
 
   SSL options:
 
@@ -242,7 +266,8 @@
   * :ssl-ca-cert - path to a PEM file containing the CA cert"
   [opts callback]
   (check-url! (:url opts))
-  (let [defaults      {:decompress-body true}
+  (let [defaults      {:decompress-body true
+                       :as              :stream}
         opts          (merge defaults opts)
         client        (create-client opts)
         {:keys [method url body] :as coerced-opts} (coerce-opts opts)
