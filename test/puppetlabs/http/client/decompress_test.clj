@@ -30,7 +30,6 @@
 (deftest gzip-compress-test
   (testing "clojure gzip decompression"
     (let [test-response {:headers {"content-encoding" "gzip"}
-                         :opts    {:decompress-body true}
                          :body    (gzip compressible-body)}
           response (async/decompress test-response)]
       (is (not (contains? (:headers response) "content-encoding")))
@@ -44,7 +43,6 @@
 (deftest deflate-compress-test
   (testing "clojure deflate decompression"
     (let [test-response {:headers {"content-encoding" "deflate"}
-                         :opts    {:decompress-body true}
                          :body    (deflate compressible-body)}
           response (async/decompress test-response)]
       (is (not (contains? (:headers response) "content-encoding")))

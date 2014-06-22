@@ -85,22 +85,23 @@
     {}
     (.getAllHeaders http-response)))
 
-(defn decompress
-  [http-response]
-  (if (get-in http-response [:opts :decompress-body])
-    (condp = (get-in http-response [:headers "content-encoding"])
-      "gzip"
-      (-> http-response
-          (ks/dissoc-in [:headers "content-encoding"])
-          (update-in [:body] #(Compression/gunzip %)))
+(defmulti decompress (fn [resp] (get-in resp [:headers "content-encoding"])))
 
-      "deflate"
-      (-> http-response
-          (ks/dissoc-in [:headers "content-encoding"])
-          (update-in [:body] #(Compression/inflate %)))
+(defmethod decompress "gzip"
+  [resp]
+  (-> resp
+      (ks/dissoc-in [:headers "content-encoding"])
+      (update-in [:body] #(Compression/gunzip %))))
 
-      http-response)
-    http-response))
+(defmethod decompress "deflate"
+  [resp]
+  (-> resp
+     (ks/dissoc-in [:headers "content-encoding"])
+     (update-in [:body] #(Compression/inflate %))))
+
+(defmethod decompress nil
+  [resp]
+  resp)
 
 (defn- response-map
   [opts http-response]
@@ -132,8 +133,8 @@
   (reify FutureCallback
     (completed [this http-response]
       (try
-        (let [response (-> (response-map opts http-response)
-                           decompress)]
+        (let [response (cond-> (response-map opts http-response)
+                               (:decompress-body opts) (decompress))]
           (deliver-result client result opts callback response))
         (catch Exception e
           (deliver-result client result opts callback
