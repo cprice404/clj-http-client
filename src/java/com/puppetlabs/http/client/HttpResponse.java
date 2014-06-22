@@ -6,6 +6,7 @@ import java.util.Map;
 
 public class HttpResponse {
     private RequestOptions options;
+    private String origContentEncoding;
     private Throwable error;
     private Object body;
     private Map<String, String> headers;
@@ -16,8 +17,9 @@ public class HttpResponse {
         this.error = error;
     }
 
-    public HttpResponse(RequestOptions options, Object body, Map<String, String> headers, int status) {
+    public HttpResponse(RequestOptions options, String origContentEncoding, Object body, Map<String, String> headers, int status) {
         this.options = options;
+        this.origContentEncoding = origContentEncoding;
         this.body = body;
         this.headers = headers;
         this.status = status;
@@ -26,6 +28,8 @@ public class HttpResponse {
     public RequestOptions getOptions() {
         return options;
     }
+
+    public String getOrigContentEncoding() { return origContentEncoding; }
 
     public Throwable getError() {
         return error;

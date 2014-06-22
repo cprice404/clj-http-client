@@ -21,9 +21,131 @@
            (org.apache.http Header)
            (org.apache.http.nio.entity NStringEntity)
            (org.apache.http.entity InputStreamEntity)
-           (java.io InputStream))
-  (:require [puppetlabs.certificate-authority.core :as ssl])
+           (java.io InputStream)
+           (com.puppetlabs.http.client.impl Compression))
+  (:require [puppetlabs.certificate-authority.core :as ssl]
+            [clojure.string :as str]
+            [puppetlabs.kitchensink.core :as ks])
   (:refer-clojure :exclude (get)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Private utility functions
+
+(defn- check-url!
+  [url]
+  (when (nil? url)
+    (throw (IllegalArgumentException. "Host URL cannot be nil"))))
+
+(defn- add-accept-encoding-header
+  [decompress-body? headers]
+  (if (and decompress-body?
+           (not (contains? headers "accept-encoding")))
+    (assoc headers "accept-encoding" (BasicHeader. "accept-encoding" "gzip, deflate"))
+    headers))
+
+(defn- prepare-headers
+  [{:keys [headers decompress-body]}]
+  (->> headers
+       (reduce
+         (fn [acc [k v]]
+           (assoc acc (str/lower-case k) (BasicHeader. k v)))
+         {})
+       (add-accept-encoding-header decompress-body)
+       vals
+       (into-array Header)))
+
+(defn- coerce-opts
+  [{:keys [url body] :as opts}]
+  {:url     url
+   :method  (clojure.core/get opts :method :get)
+   :headers (prepare-headers opts)
+   :body    (cond
+              (string? body) (NStringEntity. body)
+              (instance? InputStream body) (InputStreamEntity. body)
+              :else body)})
+
+(defn- construct-request
+  [method url]
+  (condp = method
+    :get    (HttpGet. url)
+    :head   (HttpHead. url)
+    :post   (HttpPost. url)
+    :put    (HttpPut. url)
+    :delete (HttpDelete. url)
+    :trace  (HttpTrace. url)
+    :options (HttpOptions. url)
+    :patch  (HttpPatch. url)
+    (throw (IllegalArgumentException. (format "Unsupported request method: %s" method)))))
+
+(defn- get-resp-headers
+  [http-response]
+  (reduce
+    (fn [acc h]
+      (assoc acc (.. h getName toLowerCase) (.getValue h)))
+    {}
+    (.getAllHeaders http-response)))
+
+(defn decompress
+  [http-response]
+  (if (get-in http-response [:opts :decompress-body])
+    (condp = (get-in http-response [:headers "content-encoding"])
+      "gzip"
+      (-> http-response
+          (ks/dissoc-in [:headers "content-encoding"])
+          (update-in [:body] #(Compression/gunzip %)))
+
+      "deflate"
+      (-> http-response
+          (ks/dissoc-in [:headers "content-encoding"])
+          (update-in [:body] #(Compression/inflate %)))
+
+      http-response)
+    http-response))
+
+(defn- response-map
+  [opts http-response]
+  (let [headers       (get-resp-headers http-response)
+        orig-encoding (headers "content-encoding")]
+    {:opts                  opts
+     :orig-content-encoding orig-encoding
+     :status                (.. http-response getStatusLine getStatusCode)
+     :headers               headers
+     :body                  (when-let [entity (.getEntity http-response)]
+                              (.getContent entity))}))
+
+(defn- deliver-result
+  [client result opts callback response]
+  (try
+    (deliver result
+             (if callback
+               (try
+                 (callback response)
+                 (catch Exception e
+                   {:opts  opts
+                    :error e}))
+              response))
+    (finally
+      (.close client))))
+
+(defn- future-callback
+  [client result opts callback]
+  (reify FutureCallback
+    (completed [this http-response]
+      (try
+        (let [response (-> (response-map opts http-response)
+                           decompress)]
+          (deliver-result client result opts callback response))
+        (catch Exception e
+          (deliver-result client result opts callback
+                          {:opts opts
+                           :error e}))))
+    (failed [this e]
+      (deliver-result client result opts callback
+                      {:opts opts :error e}))
+    (cancelled [this]
+      (deliver-result client result opts callback
+                      {:opts  opts
+                       :error (HttpClientException. "Request cancelled")}))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Private SSL configuration functions
@@ -31,11 +153,11 @@
 (defn- initialize-ssl-context-from-pems
   [req]
   (-> req
-    (assoc :ssl-context (ssl/pems->ssl-context
-                          (:ssl-cert req)
-                          (:ssl-key req)
-                          (:ssl-ca-cert req)))
-    (dissoc :ssl-cert :ssl-key :ssl-ca-cert)))
+      (assoc :ssl-context (ssl/pems->ssl-context
+                            (:ssl-cert req)
+                            (:ssl-key req)
+                            (:ssl-ca-cert req)))
+      (dissoc :ssl-cert :ssl-key :ssl-ca-cert)))
 
 (defn- initialize-ssl-context-from-ca-pem
   [req]
@@ -66,89 +188,20 @@
     (:ssl-ca-cert req) (configure-ssl-from-ca-pem req)
     :else req))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; Private utility functions
+(defn- wrap-with-ssl-config
+  [method]
+  (fn wrapped-fn
+    ([url]
+     (wrapped-fn url {} nil))
 
-(defn- check-url!
-  [url]
-  (when (nil? url)
-    (throw (IllegalArgumentException. "Host URL cannot be nil"))))
+    ([url callback-or-opts]
+     (if (map? callback-or-opts)
+       (wrapped-fn url callback-or-opts nil)
+       (wrapped-fn url {} callback-or-opts)))
 
-(defn prepare-headers
-  [headers]
-  (into-array
-    Header
-    (let [headers (if (clojure.core/get headers "Accept-Encoding")
-                    headers
-                    (assoc headers "Accept-Encoding" "gzip, deflate"))]
-      (map #(BasicHeader. (first %) (second %)) headers))))
-
-(defn- coerce-opts
-  [{:keys [url headers body] :as opts}]
-  {:url     url
-   :method  (clojure.core/get opts :method :get)
-   :headers (prepare-headers headers)
-   :body    (cond
-              (string? body) (NStringEntity. body)
-              (instance? InputStream body) (InputStreamEntity. body)
-              :else body)})
-
-(defn- construct-request
-  [method url]
-  (condp = method
-    :get    (HttpGet. url)
-    :head   (HttpHead. url)
-    :post   (HttpPost. url)
-    :put    (HttpPut. url)
-    :delete (HttpDelete. url)
-    :trace  (HttpTrace. url)
-    :options (HttpOptions. url)
-    :patch  (HttpPatch. url)
-    (throw (IllegalArgumentException. (format "Unsupported request method: %s" method)))))
-
-(defn get-resp-headers
-  [http-response]
-  (reduce
-    (fn [acc h]
-      (assoc acc (.getName h) (.getValue h)))
-    {}
-    (.getAllHeaders http-response)))
-
-(defn- response-map
-  [opts http-response]
-  {:opts    opts
-   :status  (.. http-response getStatusLine getStatusCode)
-   :headers (get-resp-headers http-response)
-   :body    (when-let [entity (.getEntity http-response)]
-              (.getContent entity))})
-
-(defn- deliver-result
-  [client result opts callback response]
-  (try
-    (deliver result
-             (if callback
-               (try
-                 (callback response)
-                 (catch Exception e
-                   {:opts  opts
-                    :error e}))
-              response))
-    (finally
-      (.close client))))
-
-(defn- future-callback
-  [client result opts callback]
-  (reify FutureCallback
-    (completed [this http-response]
-      (let [response (response-map opts http-response)]
-        (deliver-result client result opts callback response)))
-    (failed [this e]
-      (deliver-result client result opts callback
-                      {:opts opts :error e}))
-    (cancelled [this]
-      (deliver-result client result opts callback
-                      {:opts  opts
-                       :error (HttpClientException. "Request cancelled")}))))
+    ([url opts callback]
+     (check-url! url)
+     (method url (configure-ssl opts) callback))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Public
@@ -188,7 +241,9 @@
   * :ssl-ca-cert - path to a PEM file containing the CA cert"
   [opts callback]
   (check-url! (:url opts))
-  (let [client        (create-client opts)
+  (let [defaults      {:decompress-body true}
+        opts          (merge defaults opts)
+        client        (create-client opts)
         {:keys [method url body] :as coerced-opts} (coerce-opts opts)
         request       (construct-request method url)
         result        (promise)]
@@ -199,20 +254,6 @@
               (future-callback client result opts callback))
     result))
 
-(defn- wrap-with-ssl-config
-  [method]
-  (fn wrapped-fn
-    ([url]
-     (wrapped-fn url {} nil))
-
-    ([url callback-or-opts]
-     (if (map? callback-or-opts)
-       (wrapped-fn url callback-or-opts nil)
-       (wrapped-fn url {} callback-or-opts)))
-
-    ([url opts callback]
-     (check-url! url)
-     (method url (configure-ssl opts) callback))))
 
 (def ^{:arglists '([url] [url callback-or-opts] [url opts callback])} get
   "Issue an async HTTP GET request."

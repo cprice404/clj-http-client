@@ -9,7 +9,6 @@ import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.*;
 import org.apache.http.concurrent.FutureCallback;
-import org.apache.http.entity.BasicHttpEntity;
 import org.apache.http.entity.InputStreamEntity;
 import org.apache.http.impl.nio.client.CloseableHttpAsyncClient;
 import org.apache.http.impl.nio.client.HttpAsyncClients;
@@ -24,9 +23,7 @@ import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class JavaClient {
@@ -34,16 +31,19 @@ public class JavaClient {
     private static final String PROTOCOL = "TLS";
 
     private static Header[] prepareHeaders(RequestOptions options) {
-        List<Header> result = new ArrayList<Header>();
-        if (options.getHeaders() != null) {
-            for (Map.Entry<String, String> entry : options.getHeaders().entrySet()) {
-                result.add(new BasicHeader(entry.getKey(), entry.getValue()));
-            }
-            if (! options.getHeaders().containsKey("Accept-Encoding")) {
-                result.add(new BasicHeader("Accept-Encoding", "gzip, deflate"));
-            }
+        Map<String, Header> result = new HashMap<String, Header>();
+        Map<String, String> origHeaders = options.getHeaders();
+        if (origHeaders == null) {
+            origHeaders = new HashMap<String, String>();
         }
-        return result.toArray(new Header[result.size()]);
+        for (Map.Entry<String, String> entry : origHeaders.entrySet()) {
+            result.put(entry.getKey().toLowerCase(), new BasicHeader(entry.getKey(), entry.getValue()));
+        }
+        if (options.getDecompressBody() &&
+                (! origHeaders.containsKey("accept-encoding"))) {
+            result.put("accept-encoding", new BasicHeader("Accept-Encoding", "gzip, deflate"));
+        }
+        return result.values().toArray(new Header[result.size()]);
     }
 
     private static CoercedRequestOptions coerceRequestOptions(RequestOptions options) {
@@ -123,20 +123,24 @@ public class JavaClient {
         client.execute(request, new FutureCallback<org.apache.http.HttpResponse>() {
             @Override
             public void completed(org.apache.http.HttpResponse httpResponse) {
-                InputStream body = null;
                 try {
+                    InputStream body = null;
                     HttpEntity entity = httpResponse.getEntity();
                     if (entity != null) {
                         body = entity.getContent();
                     }
+                    Map<String, String> headers = new HashMap<String, String>();
+                    for (Header h : httpResponse.getAllHeaders()) {
+                        headers.put(h.getName().toLowerCase(), h.getValue());
+                    }
+                    String origContentEncoding = headers.get("content-encoding");
+                    if (options.getDecompressBody()) {
+                        body = decompress(body, headers);
+                    }
+                    deliverResponse(client, options, new HttpResponse(options, origContentEncoding, body, headers, httpResponse.getStatusLine().getStatusCode()), callback, promise);
                 } catch (Exception e) {
                     deliverResponse(client, options, new HttpResponse(options, e), callback, promise);
                 }
-                Map<String, String> headers = new HashMap<String, String>();
-                for (Header h : httpResponse.getAllHeaders()) {
-                    headers.put(h.getName(), h.getValue());
-                }
-                deliverResponse(client, options, new HttpResponse(options, body, headers, httpResponse.getStatusLine().getStatusCode()), callback, promise);
             }
 
             @Override
@@ -221,5 +225,22 @@ public class JavaClient {
             throw new HttpClientException("Request of type " + httpMethod + " does not support 'body'!");
         }
         return request;
+    }
+
+    public static InputStream decompress(InputStream compressed, Map<String, String> headers) {
+        String contentEncoding = headers.get("content-encoding");
+        if (contentEncoding == null) {
+            return compressed;
+        }
+        switch (contentEncoding) {
+            case "gzip":
+                headers.remove("content-encoding");
+                return Compression.gunzip(compressed);
+            case "deflate":
+                headers.remove("content-encoding");
+                return Compression.inflate(compressed);
+            default:
+                return compressed;
+        }
     }
 }

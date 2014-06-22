@@ -1,4 +1,4 @@
-(def ks-version "0.7.1")
+(def ks-version "0.7.2-SNAPSHOT")
 (def tk-version "0.4.2")
 
 (defproject puppetlabs/http-client "0.2.0-SNAPSHOT"
@@ -15,12 +15,12 @@
                  [org.apache.httpcomponents/httpasyncclient "4.0.1"]
                  [puppetlabs/certificate-authority "0.1.5"]
                  [org.clojure/tools.logging "0.2.6"]
+                 [puppetlabs/kitchensink ~ks-version]
                  [org.slf4j/slf4j-api "1.7.6"]]
 
   :source-paths ["src/clj"]
   :java-source-paths ["src/java"]
   :jar-exclusions [#".*\.java$"]
-  :javac-options ["-target" "1.6" "-source" "1.6" "-Xlint:-options"]
 
   ;; By declaring a classifier here and a corresponding profile below we'll get an additional jar
   ;; during `lein jar` that has all the source code (including the java source). Downstream projects can then
@@ -30,7 +30,10 @@
   :profiles {:dev {:dependencies [[puppetlabs/kitchensink ~ks-version :classifier "test"]
                                   [puppetlabs/trapperkeeper ~tk-version]
                                   [puppetlabs/trapperkeeper ~tk-version :classifier "test"]
-                                  [puppetlabs/trapperkeeper-webserver-jetty9 "0.5.0"]]}
+                                  [puppetlabs/trapperkeeper-webserver-jetty9 "0.5.0"]
+                                  [commons-io "2.1"]
+                                  [spyscope "0.1.4"]]
+                   :injections [(require 'spyscope.core)]}
              :sources-jar {:java-source-paths ^:replace []
                            :jar-exclusions ^:replace []
                            :source-paths ^:replace ["src/clj" "src/java"]}}

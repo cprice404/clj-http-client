@@ -26,6 +26,7 @@ public class RequestOptions {
     private String sslCaCert;
     private boolean insecure = false;
     private Object body;
+    private boolean decompressBody = true;
 
     public RequestOptions(String url) {
         this.url = url;
@@ -108,6 +109,12 @@ public class RequestOptions {
     }
     public RequestOptions setBody(Object body) {
         this.body = body;
+        return this;
+    }
+
+    public boolean getDecompressBody() { return decompressBody; }
+    public RequestOptions setDecompressBody(boolean decompressBody) {
+        this.decompressBody = decompressBody;
         return this;
     }
 }

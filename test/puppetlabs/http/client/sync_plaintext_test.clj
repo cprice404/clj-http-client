@@ -117,7 +117,7 @@
                      (add-ring-handler req-body-app "/hello")
                      context))
 
-(deftest sync-client-request-headers-test
+(deftest sync-client-request-body-test
   (testlogging/with-test-logging
     (testutils/with-app-with-config req-body-app
       [jetty9/jetty9-service test-body-web-service]
@@ -137,3 +137,58 @@
         (let [response (sync/post "http://localhost:10000/hello/" {:body (ByteArrayInputStream. (.getBytes "foo" "UTF-8"))})]
           (is (= 200 (:status response)))
           (is (= "foo" (slurp (:body response)))))))))
+
+(def compressible-body (apply str (repeat 1000 "f")))
+
+(defn compression-app
+  [req]
+  {:status  200
+   :headers {"orig-accept-encoding" (get-in req [:headers "accept-encoding"])
+             "content-type" "text/plain"
+             "charset" "UTF-8"}
+   :body    compressible-body})
+
+(tk/defservice test-compression-web-service
+  [[:WebserverService add-ring-handler]]
+  (init [this context]
+       (add-ring-handler compression-app "/hello")
+       context))
+
+(defn test-compression
+  [desc opts accept-encoding content-encoding content-should-match?]
+  (testlogging/with-test-logging
+    (testutils/with-app-with-config req-body-app
+      [jetty9/jetty9-service test-compression-web-service]
+      {:webserver {:port 10000}}
+      (testing (str "java sync client: compression headers / response: " desc)
+        (let [java-opts (cond-> (RequestOptions. "http://localhost:10000/hello/")
+                                (contains? opts :decompress-body) (.setDecompressBody (:decompress-body opts))
+                                (contains? opts :headers) (.setHeaders (:headers opts)))
+              response (SyncHttpClient/get java-opts)]
+          (is (= 200 (.getStatus response)))
+          (is (= accept-encoding (.. response getHeaders (get "orig-accept-encoding"))))
+          (is (= content-encoding (.. response getOrigContentEncoding)))
+          (if content-should-match?
+            (is (= compressible-body (slurp (.getBody response))))
+            (is (not= compressible-body (slurp (.getBody response)))))))
+      (testing (str "clojure sync client: compression headers / response: " desc)
+        (let [response (sync/post "http://localhost:10000/hello/" opts)]
+          (is (= 200 (:status response)))
+          (is (= accept-encoding (get-in response [:headers "orig-accept-encoding"])))
+          (is (= content-encoding (:orig-content-encoding response)))
+          (if content-should-match?
+            (is (= compressible-body (slurp (:body response))))
+            (is (not= compressible-body (slurp (:body response))))))))))
+
+(deftest sync-client-compression-test
+  (test-compression "default" {} "gzip, deflate" "gzip" true))
+
+(deftest sync-client-compression-gzip-test
+  (test-compression "explicit gzip" {:headers {"accept-encoding" "gzip"}} "gzip" "gzip" true))
+
+(deftest sync-client-compression-disabled-test
+  (test-compression "explicit disable" {:decompress-body false} nil nil true))
+
+(deftest sync-client-decompression-disabled-test
+  (test-compression "explicit disable" {:headers {"accept-encoding" "gzip"}
+                                        :decompress-body false} "gzip" "gzip" false))
