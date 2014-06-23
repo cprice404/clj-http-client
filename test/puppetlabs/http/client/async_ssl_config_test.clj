@@ -9,49 +9,41 @@
 (use-fixtures :once schema-test/validate-schemas)
 
 (deftest ssl-config-with-files
-  (let [req {:url "http://localhost"
-             :method :get
-             :ssl-cert (resource "ssl/cert.pem")
+  (let [opts {:ssl-cert (resource "ssl/cert.pem")
              :ssl-key (resource "ssl/key.pem")
              :ssl-ca-cert (resource "ssl/ca.pem")}
-        configured-req (http/configure-ssl req)]
+        configured-opts (http/configure-ssl opts)]
 
     (testing "configure-ssl sets up an SSLContext when given cert, key, ca-cert"
-      (is (instance? SSLContext (:ssl-context configured-req))))
+      (is (instance? SSLContext (:ssl-context configured-opts))))
 
     (testing "removes ssl-cert, ssl-key, ssl-ca-cert"
-      (is (not (:ssl-cert configured-req)))
-      (is (not (:ssl-key configured-req)))
-      (is (not (:ssl-ca-cert configured-req))))))
+      (is (not (:ssl-cert configured-opts)))
+      (is (not (:ssl-key configured-opts)))
+      (is (not (:ssl-ca-cert configured-opts))))))
 
 (deftest ssl-config-with-ca-file
-  (let [req {:url         "http://localhost"
-             :method      :get
-             :ssl-ca-cert (resource "ssl/ca.pem")}
-        configured-req (http/configure-ssl req)]
+  (let [opts {:ssl-ca-cert (resource "ssl/ca.pem")}
+        configured-opts (http/configure-ssl opts)]
 
     (testing "configure-ssl sets up an SSLContext when given ca-cert"
-      (is (instance? SSLContext (:ssl-context configured-req))))
+      (is (instance? SSLContext (:ssl-context configured-opts))))
 
     (testing "removes ssl-ca-cert"
-      (is (not (:ssl-ca-cert configured-req))))))
+      (is (not (:ssl-ca-cert configured-opts))))))
 
 (deftest ssl-config-without-ssl-params
-  (let [req {:url "http://localhost"
-             :method :get}
-        configured-req (http/configure-ssl req)]
+  (let [configured-opts (http/configure-ssl {})]
 
     (testing "configure-ssl does nothing when given no ssl parameters"
-      (is (= req configured-req)))))
+      (is (= {} configured-opts)))))
 
 (deftest ssl-config-with-context
-  (let [req {:url "http://localhost"
-             :method :get
-             :ssl-context (ssl/pems->ssl-context
+  (let [opts {:ssl-context (ssl/pems->ssl-context
                             (resource "ssl/cert.pem")
                             (resource "ssl/key.pem")
                             (resource "ssl/ca.pem"))}
-        configured-req (http/configure-ssl req)]
+        configured-opts (http/configure-ssl opts)]
 
     (testing "configure-ssl uses an existing ssl context"
-      (is (instance? SSLContext (:ssl-context configured-req))))))
+      (is (instance? SSLContext (:ssl-context configured-opts))))))

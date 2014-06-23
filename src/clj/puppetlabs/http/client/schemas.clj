@@ -23,22 +23,53 @@
 (def Body
   (schema/maybe (schema/either String InputStream)))
 
-(def RequestOptions
+(def BodyType
+  (schema/enum :text :stream))
+
+(def RawUserRequestOptions
   {:url                   UrlOrString
    :method                schema/Keyword
    (ok :headers)          Headers
    (ok :body)             Body
    (ok :decompress-body)  schema/Bool
-   (ok :as)               (schema/enum :text :stream)
+   (ok :as)               BodyType
 
    (ok :ssl-context)      SSLContext
    (ok :ssl-cert)         UrlOrString
    (ok :ssl-key)          UrlOrString
    (ok :ssl-ca-cert)      UrlOrString})
 
-;; TODO: fix this
+(def RequestOptions
+  {:url             UrlOrString
+   :method          schema/Keyword
+   :headers         Headers
+   :body            Body
+   :decompress-body schema/Bool
+   :as              BodyType})
+
+(def SslContextOptions
+  {:ssl-context SSLContext})
+
+(def SslCaCertOptions
+  {:ssl-ca-cert UrlOrString})
+
+(def SslCertOptions
+  {:ssl-cert    UrlOrString
+   :ssl-key     UrlOrString
+   :ssl-ca-cert UrlOrString})
+
+(def SslOptions
+  (schema/either {} SslContextOptions SslCertOptions SslCaCertOptions))
+
+(def UserRequestOptions
+  (schema/either
+    RequestOptions
+    (merge RequestOptions SslContextOptions)
+    (merge RequestOptions SslCaCertOptions)
+    (merge RequestOptions SslCertOptions)))
+
 (def ClientOptions
-  RequestOptions)
+  SslOptions)
 
 (def ResponseCallbackFn
   (schema/maybe (schema/pred ifn?)))
@@ -51,7 +82,7 @@
                  :charset   (schema/maybe Charset)}))
 
 (def NormalResponse
-  {:opts RequestOptions
+  {:opts UserRequestOptions
    :orig-content-encoding (schema/maybe schema/Str)
    :body Body
    :headers Headers
@@ -59,7 +90,7 @@
    :content-type ContentType})
 
 (def ErrorResponse
-  {:opts  RequestOptions
+  {:opts  UserRequestOptions
    :error Exception})
 
 (def Response

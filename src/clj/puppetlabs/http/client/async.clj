@@ -27,7 +27,8 @@
             [clojure.string :as str]
             [puppetlabs.kitchensink.core :as ks]
             [puppetlabs.http.client.schemas :as schemas]
-            [schema.core :as schema])
+            [schema.core :as schema]
+            [clojure.tools.logging :as log])
   (:refer-clojure :exclude (get)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -59,13 +60,12 @@
   [req]
   (initialize-ssl-context-from-ca-pem req))
 
-;; TODO: improve schemas on this fn
-(schema/defn configure-ssl :- schemas/RequestOptions
+(schema/defn configure-ssl :- (schema/either {} schemas/SslContextOptions)
   "Configures a request map to have an SSLContext. It will use an existing one
   (stored in :ssl-context) if already present, and will fall back to a set of
   PEM files (stored in :ssl-cert, :ssl-key, and :ssl-ca-cert) if those are present.
   If none of these are present this does not modify the request map."
-  [opts :- schemas/RequestOptions]
+  [opts :- schemas/SslOptions]
   (cond
     (:ssl-context opts) opts
     (every? (partial opts) [:ssl-cert :ssl-key :ssl-ca-cert]) (configure-ssl-from-pems opts)
@@ -175,15 +175,15 @@
                               (.getContent entity))}))
 
 (schema/defn error-response :- schemas/ErrorResponse
-  [opts :- schemas/RequestOptions
+  [opts :- schemas/UserRequestOptions
    e :- Exception]
   {:opts opts
    :error e})
 
 (schema/defn callback-response :- schemas/Response
-  [callback :- schemas/ResponseCallbackFn
-   response :- schemas/Response
-   opts :- schemas/RequestOptions]
+  [opts :- schemas/UserRequestOptions
+   callback :- schemas/ResponseCallbackFn
+   response :- schemas/Response]
   (if callback
     (try
       (callback response)
@@ -194,16 +194,19 @@
 (schema/defn deliver-result
   [client :- schemas/Client
    result :- schemas/ResponsePromise
-   opts :- schemas/RequestOptions
+   opts :- schemas/UserRequestOptions
    callback :- schemas/ResponseCallbackFn
    response :- schemas/Response]
   (try
-    (deliver result (callback-response callback response opts))
+    (deliver result (callback-response opts callback response))
     (finally
       (.close client))))
 
-(defn- future-callback
-  [client result opts callback]
+(schema/defn future-callback
+  [client :- schemas/Client
+   result :- schemas/ResponsePromise
+   opts :- schemas/UserRequestOptions
+   callback :- schemas/ResponseCallbackFn]
   (reify FutureCallback
     (completed [this http-response]
       (try
@@ -212,6 +215,7 @@
                                (not= :stream (:as opts)) (coerce-body-type))]
           (deliver-result client result opts callback response))
         (catch Exception e
+          (log/warn e "Error when delivering response")
           (deliver-result client result opts callback
                           (error-response opts e)))))
     (failed [this e]
@@ -222,6 +226,10 @@
                       (error-response
                         opts
                         (HttpClientException. "Request cancelled"))))))
+
+(schema/defn extract-client-opts :- schemas/ClientOptions
+  [opts :- schemas/UserRequestOptions]
+  (select-keys opts [:ssl-context :ssl-ca-cert :ssl-cert :ssl-key]))
 
 (schema/defn create-client :- schemas/Client
   [opts :- schemas/ClientOptions]
@@ -235,7 +243,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Public
 
-(schema/defn request :- schemas/ResponsePromise
+(schema/defn ^:always-validate request :- schemas/ResponsePromise
   "Issues an async HTTP request and returns a promise object to which the value
   of `(callback {:opts _ :status _ :headers _ :body _})` or
      `(callback {:opts _ :error _})` will be delivered.
@@ -265,15 +273,18 @@
   * :ssl-cert - path to a PEM file containing the client cert
   * :ssl-key - path to a PEM file containing the client private key
   * :ssl-ca-cert - path to a PEM file containing the CA cert"
-  ([opts :- schemas/RequestOptions]
+  ([opts :- schemas/RawUserRequestOptions]
    (request opts nil))
-  ([opts :- schemas/RequestOptions
+  ([opts :- schemas/RawUserRequestOptions
     callback :- schemas/ResponseCallbackFn]
    (check-url! (:url opts))
-   (let [defaults {:decompress-body true
+   (let [defaults {:headers         {}
+                   :body            nil
+                   :decompress-body true
                    :as              :stream}
          opts (merge defaults opts)
-         client (create-client opts)
+         client-opts (extract-client-opts opts)
+         client (create-client client-opts)
          {:keys [method url body] :as coerced-opts} (coerce-opts opts)
          request (construct-request method url)
          result (promise)]
