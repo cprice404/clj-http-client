@@ -5,7 +5,10 @@
            (com.puppetlabs.http.client.impl JavaClient)
            (java.util HashMap))
   (:require [clojure.test :refer :all]
-            [puppetlabs.http.client.async :as async]))
+            [puppetlabs.http.client.async :as async]
+            [schema.test :as schema-test]))
+
+(use-fixtures :once schema-test/validate-schemas)
 
 (def compressible-body (apply str (repeat 1000 "f")))
 

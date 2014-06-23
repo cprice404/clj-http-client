@@ -2,8 +2,11 @@
   (:require [clojure.test :refer :all]
             [clojure.java.io :refer [resource]] 
             [puppetlabs.certificate-authority.core :as ssl]
-            [puppetlabs.http.client.async :as http])
+            [puppetlabs.http.client.async :as http]
+            [schema.test :as schema-test])
   (:import [javax.net.ssl SSLContext]))
+
+(use-fixtures :once schema-test/validate-schemas)
 
 (deftest ssl-config-with-files
   (let [req {:url "http://localhost"
@@ -22,7 +25,9 @@
       (is (not (:ssl-ca-cert configured-req))))))
 
 (deftest ssl-config-with-ca-file
-  (let [req {:ssl-ca-cert (resource "ssl/ca.pem")}
+  (let [req {:url         "http://localhost"
+             :method      :get
+             :ssl-ca-cert (resource "ssl/ca.pem")}
         configured-req (http/configure-ssl req)]
 
     (testing "configure-ssl sets up an SSLContext when given ca-cert"

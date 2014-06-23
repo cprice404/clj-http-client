@@ -7,7 +7,10 @@
             [puppetlabs.trapperkeeper.testutils.bootstrap :as testutils]
             [puppetlabs.trapperkeeper.testutils.logging :as testlogging]
             [puppetlabs.trapperkeeper.services.webserver.jetty9-service :as jetty9]
-            [puppetlabs.http.client.sync :as sync]))
+            [puppetlabs.http.client.sync :as sync]
+            [schema.test :as schema-test]))
+
+(use-fixtures :once schema-test/validate-schemas)
 
 (defn app
   [req]
@@ -19,8 +22,6 @@
   (init [this context]
         (add-ring-handler app "/hello")
         context))
-
-;; TODO: test 'insecure' option
 
 (deftest sync-client-test-from-pems
   (testlogging/with-test-logging

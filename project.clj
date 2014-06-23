@@ -12,11 +12,14 @@
   :pedantic? :abort
 
   :dependencies [[org.clojure/clojure "1.5.1"]
-                 [org.apache.httpcomponents/httpasyncclient "4.0.1"]
                  [puppetlabs/certificate-authority "0.1.5"]
                  [org.clojure/tools.logging "0.2.6"]
                  [puppetlabs/kitchensink ~ks-version]
-                 [org.slf4j/slf4j-api "1.7.6"]]
+                 [org.slf4j/slf4j-api "1.7.6"]
+                 [org.apache.httpcomponents/httpasyncclient "4.0.1"]
+                 [org.apache.httpcomponents/httpcore "4.3.2"]
+                 [commons-io "2.1"]
+                 [prismatic/schema "0.2.1"]]
 
   :source-paths ["src/clj"]
   :java-source-paths ["src/java"]
@@ -31,7 +34,6 @@
                                   [puppetlabs/trapperkeeper ~tk-version]
                                   [puppetlabs/trapperkeeper ~tk-version :classifier "test"]
                                   [puppetlabs/trapperkeeper-webserver-jetty9 "0.5.0"]
-                                  [commons-io "2.1"]
                                   [spyscope "0.1.4"]]
                    :injections [(require 'spyscope.core)]}
              :sources-jar {:java-source-paths ^:replace []
