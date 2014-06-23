@@ -1,6 +1,6 @@
 package com.puppetlabs.http.client;
 
-public enum HttpResponseBodyType {
+public enum ResponseBodyType {
     STREAM,
     TEXT;
 }

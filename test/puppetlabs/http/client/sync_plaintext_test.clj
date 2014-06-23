@@ -1,6 +1,6 @@
 (ns puppetlabs.http.client.sync-plaintext-test
   (:import (com.puppetlabs.http.client SyncHttpClient RequestOptions
-                                       HttpClientException HttpResponseBodyType)
+                                       HttpClientException ResponseBodyType)
            (javax.net.ssl SSLHandshakeException)
            (java.io ByteArrayInputStream InputStream)
            (java.nio.charset Charset))
@@ -91,14 +91,14 @@
           (is (= "Hello, World!" (slurp (.getBody response))))))
       (testing "java sync client: :as :stream"
         (let [options (.. (RequestOptions. "http://localhost:10000/hello/")
-                          (setAs HttpResponseBodyType/STREAM))
+                          (setAs ResponseBodyType/STREAM))
               response (SyncHttpClient/get options)]
           (is (= 200 (.getStatus response)))
           (is (instance? InputStream (.getBody response)))
           (is (= "Hello, World!" (slurp (.getBody response))))))
       (testing "java sync client: :as :text"
         (let [options (.. (RequestOptions. "http://localhost:10000/hello/")
-                          (setAs HttpResponseBodyType/TEXT))
+                          (setAs ResponseBodyType/TEXT))
               response (SyncHttpClient/get options)]
           (is (= 200 (.getStatus response)))
           (is (string? (.getBody response)))

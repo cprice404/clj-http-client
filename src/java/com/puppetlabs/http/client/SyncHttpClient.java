@@ -82,16 +82,16 @@ public class SyncHttpClient {
         return options;
     }
 
-    public static HttpResponse request(RequestOptions options) {
+    public static Response request(RequestOptions options) {
         // TODO: if we end up implementing an async version of the java API,
         // we should refactor this implementation so that it is based on the
         // async one, as Patrick has done in the clojure API.
 
         options = configureSsl(options);
 
-        Promise<HttpResponse> promise =  JavaClient.request(options, null);
+        Promise<Response> promise =  JavaClient.request(options, null);
 
-        HttpResponse response = null;
+        Response response = null;
         try {
             response = promise.deref();
         } catch (InterruptedException e) {
@@ -104,59 +104,59 @@ public class SyncHttpClient {
     }
 
 
-    public static HttpResponse get(String url) {
+    public static Response get(String url) {
         return get(new RequestOptions(url));
     }
-    public static HttpResponse get(RequestOptions requestOptions) {
+    public static Response get(RequestOptions requestOptions) {
         return request(requestOptions.setMethod(HttpMethod.GET));
     }
 
-    public static HttpResponse head(String url) {
+    public static Response head(String url) {
         return head(new RequestOptions(url));
     }
-    public static HttpResponse head(RequestOptions requestOptions) {
+    public static Response head(RequestOptions requestOptions) {
         return request(requestOptions.setMethod(HttpMethod.HEAD));
     }
 
-    public static HttpResponse post(String url) {
+    public static Response post(String url) {
         return post(new RequestOptions(url));
     }
-    public static HttpResponse post(RequestOptions requestOptions) {
+    public static Response post(RequestOptions requestOptions) {
         return request(requestOptions.setMethod(HttpMethod.POST));
     }
 
-    public static HttpResponse put(String url) {
+    public static Response put(String url) {
         return put(new RequestOptions(url));
     }
-    public static HttpResponse put(RequestOptions requestOptions) {
+    public static Response put(RequestOptions requestOptions) {
         return request(requestOptions.setMethod(HttpMethod.PUT));
     }
 
-    public static HttpResponse delete(String url) {
+    public static Response delete(String url) {
         return delete(new RequestOptions(url));
     }
-    public static HttpResponse delete(RequestOptions requestOptions) {
+    public static Response delete(RequestOptions requestOptions) {
         return request(requestOptions.setMethod(HttpMethod.DELETE));
     }
 
-    public static HttpResponse trace(String url) {
+    public static Response trace(String url) {
         return trace(new RequestOptions(url));
     }
-    public static HttpResponse trace(RequestOptions requestOptions) {
+    public static Response trace(RequestOptions requestOptions) {
         return request(requestOptions.setMethod(HttpMethod.TRACE));
     }
 
-    public static HttpResponse options(String url) {
+    public static Response options(String url) {
         return options(new RequestOptions(url));
     }
-    public static HttpResponse options(RequestOptions requestOptions) {
+    public static Response options(RequestOptions requestOptions) {
         return request(requestOptions.setMethod(HttpMethod.OPTIONS));
     }
 
-    public static HttpResponse patch(String url) {
+    public static Response patch(String url) {
         return patch(new RequestOptions(url));
     }
-    public static HttpResponse patch(RequestOptions requestOptions) {
+    public static Response patch(RequestOptions requestOptions) {
         return request(requestOptions.setMethod(HttpMethod.PATCH));
     }
 }

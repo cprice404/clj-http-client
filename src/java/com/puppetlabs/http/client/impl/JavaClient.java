@@ -108,7 +108,7 @@ public class JavaClient {
         return context;
     }
 
-    public static Promise<HttpResponse> request(final RequestOptions options, final IResponseCallback callback) {
+    public static Promise<Response> request(final RequestOptions options, final IResponseCallback callback) {
         CoercedRequestOptions coercedOptions = coerceRequestOptions(options);
 
         final CloseableHttpAsyncClient client = createClient(coercedOptions);
@@ -117,7 +117,7 @@ public class JavaClient {
                 coercedOptions.getUrl(), coercedOptions.getBody());
         request.setHeaders(coercedOptions.getHeaders());
 
-        final Promise<HttpResponse> promise = new Promise<HttpResponse>();
+        final Promise<Response> promise = new Promise<Response>();
 
         client.execute(request, new FutureCallback<org.apache.http.HttpResponse>() {
             @Override
@@ -140,27 +140,27 @@ public class JavaClient {
                     if (headers.get("content-type") != null) {
                         contentType = ContentType.parse(headers.get("content-type"));
                     }
-                    if (options.getAs() != HttpResponseBodyType.STREAM) {
+                    if (options.getAs() != ResponseBodyType.STREAM) {
                         body = coerceBodyType((InputStream)body, options.getAs(), contentType);
                     }
                     deliverResponse(client, options,
-                            new HttpResponse(options, origContentEncoding, body,
+                            new Response(options, origContentEncoding, body,
                                     headers, httpResponse.getStatusLine().getStatusCode(),
                                     contentType),
                             callback, promise);
                 } catch (Exception e) {
-                    deliverResponse(client, options, new HttpResponse(options, e), callback, promise);
+                    deliverResponse(client, options, new Response(options, e), callback, promise);
                 }
             }
 
             @Override
             public void failed(Exception e) {
-                deliverResponse(client, options, new HttpResponse(options, e), callback, promise);
+                deliverResponse(client, options, new Response(options, e), callback, promise);
             }
 
             @Override
             public void cancelled() {
-                deliverResponse(client, options, new HttpResponse(options, new HttpClientException("Request cancelled", null)), callback, promise);
+                deliverResponse(client, options, new Response(options, new HttpClientException("Request cancelled", null)), callback, promise);
             }
         });
 
@@ -179,14 +179,14 @@ public class JavaClient {
     }
 
     private static void deliverResponse(CloseableHttpAsyncClient client, RequestOptions options,
-                                        HttpResponse httpResponse, IResponseCallback callback,
-                                        Promise<HttpResponse> promise) {
+                                        Response httpResponse, IResponseCallback callback,
+                                        Promise<Response> promise) {
         try {
             if (callback != null) {
                 try {
                     promise.deliver(callback.handleResponse(httpResponse));
                 } catch (Exception ex) {
-                    promise.deliver(new HttpResponse(options, ex));
+                    promise.deliver(new Response(options, ex));
                 }
             } else {
                 promise.deliver(httpResponse);
@@ -254,7 +254,7 @@ public class JavaClient {
         }
     }
 
-    private static Object coerceBodyType(InputStream body, HttpResponseBodyType as,
+    private static Object coerceBodyType(InputStream body, ResponseBodyType as,
                                          ContentType contentType) {
         switch (as) {
             case TEXT:

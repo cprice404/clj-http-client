@@ -5,7 +5,7 @@ import org.apache.http.entity.ContentType;
 
 import java.util.Map;
 
-public class HttpResponse {
+public class Response {
     private RequestOptions options;
     private String origContentEncoding;
     private Throwable error;
@@ -14,14 +14,14 @@ public class HttpResponse {
     private Integer status;
     private ContentType contentType;
 
-    public HttpResponse(RequestOptions options, Throwable error) {
+    public Response(RequestOptions options, Throwable error) {
         this.options = options;
         this.error = error;
     }
 
-    public HttpResponse(RequestOptions options, String origContentEncoding,
-                        Object body, Map<String, String> headers, int status,
-                        ContentType contentType) {
+    public Response(RequestOptions options, String origContentEncoding,
+                    Object body, Map<String, String> headers, int status,
+                    ContentType contentType) {
         this.options = options;
         this.origContentEncoding = origContentEncoding;
         this.body = body;

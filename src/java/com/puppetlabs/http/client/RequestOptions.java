@@ -1,6 +1,5 @@
 package com.puppetlabs.http.client;
 
-import com.puppetlabs.http.client.impl.*;
 import org.apache.http.nio.client.HttpAsyncClient;
 //import org.httpkit.client.HttpClient;
 //
@@ -8,11 +7,7 @@ import org.apache.http.nio.client.HttpAsyncClient;
 //import org.httpkit.client.MultipartEntity;
 
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLEngine;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
 
 public class RequestOptions {
     private HttpAsyncClient client = null;
@@ -27,7 +22,7 @@ public class RequestOptions {
     private boolean insecure = false;
     private Object body;
     private boolean decompressBody = true;
-    private HttpResponseBodyType as = HttpResponseBodyType.STREAM;
+    private ResponseBodyType as = ResponseBodyType.STREAM;
 
     public RequestOptions(String url) {
         this.url = url;
@@ -119,10 +114,10 @@ public class RequestOptions {
         return this;
     }
 
-    public HttpResponseBodyType getAs() {
+    public ResponseBodyType getAs() {
         return as;
     }
-    public RequestOptions setAs(HttpResponseBodyType as) {
+    public RequestOptions setAs(ResponseBodyType as) {
         this.as = as;
         return this;
     }
