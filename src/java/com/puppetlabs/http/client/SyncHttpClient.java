@@ -3,6 +3,7 @@ package com.puppetlabs.http.client;
 import com.puppetlabs.certificate_authority.CertificateAuthority;
 import com.puppetlabs.http.client.impl.JavaClient;
 import com.puppetlabs.http.client.impl.Promise;
+import com.puppetlabs.http.client.impl.SslUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,71 +24,12 @@ public class SyncHttpClient {
         throw new HttpClientException(msg, t);
     }
 
-    // TODO: move this into the async java API if we ever add one
-    private static RequestOptions configureSsl(RequestOptions options) {
-        if (options.getSslContext() != null) {
-            return options;
-        }
-
-        if ((options.getSslCert() != null) &&
-                (options.getSslKey() != null) &&
-                (options.getSslCaCert() != null)) {
-            try {
-                options.setSslContext(
-                        CertificateAuthority.pemsToSSLContext(
-                                new FileReader(options.getSslCert()),
-                                new FileReader(options.getSslKey()),
-                                new FileReader(options.getSslCaCert()))
-                );
-            } catch (KeyStoreException e) {
-                logAndRethrow("Error while configuring SSL", e);
-            } catch (CertificateException e) {
-                logAndRethrow("Error while configuring SSL", e);
-            } catch (IOException e) {
-                logAndRethrow("Error while configuring SSL", e);
-            } catch (NoSuchAlgorithmException e) {
-                logAndRethrow("Error while configuring SSL", e);
-            } catch (KeyManagementException e) {
-                logAndRethrow("Error while configuring SSL", e);
-            } catch (UnrecoverableKeyException e) {
-                logAndRethrow("Error while configuring SSL", e);
-            }
-            options.setSslCert(null);
-            options.setSslKey(null);
-            options.setSslCaCert(null);
-            return options;
-        }
-
-        if (options.getSslCaCert() != null) {
-            try {
-                options.setSslContext(
-                        CertificateAuthority.caCertPemToSSLContext(
-                                new FileReader(options.getSslCaCert()))
-                );
-            } catch (KeyStoreException e) {
-                logAndRethrow("Error while configuring SSL", e);
-            } catch (CertificateException e) {
-                logAndRethrow("Error while configuring SSL", e);
-            } catch (IOException e) {
-                logAndRethrow("Error while configuring SSL", e);
-            } catch (NoSuchAlgorithmException e) {
-                logAndRethrow("Error while configuring SSL", e);
-            } catch (KeyManagementException e) {
-                logAndRethrow("Error while configuring SSL", e);
-            }
-            options.setSslCaCert(null);
-            return options;
-        }
-
-        return options;
-    }
-
     public static Response request(RequestOptions options) {
         // TODO: if we end up implementing an async version of the java API,
         // we should refactor this implementation so that it is based on the
         // async one, as Patrick has done in the clojure API.
 
-        options = configureSsl(options);
+        options = SslUtils.configureSsl(options);
 
         Promise<Response> promise =  JavaClient.request(options, null);
 
