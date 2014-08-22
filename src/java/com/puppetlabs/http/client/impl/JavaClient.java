@@ -256,12 +256,14 @@ public class JavaClient {
         }
     }
 
-    private static Object coerceBodyType(InputStream body, ResponseBodyType as,
+    public static Object coerceBodyType(InputStream body, ResponseBodyType as,
                                          ContentType contentType) {
         switch (as) {
             case TEXT:
+                System.out.println("COERCING TO TEXT; content type: " + contentType);
                 String charset = "UTF-8";
                 if (contentType != null) {
+                    System.out.println("Content type is not null; charset: " + contentType.getCharset());
                     charset = contentType.getCharset().name();
                 }
                 try {
