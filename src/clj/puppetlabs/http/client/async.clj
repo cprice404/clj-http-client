@@ -26,7 +26,8 @@
            (org.apache.http.client RedirectStrategy)
            (org.apache.http.impl.client LaxRedirectStrategy DefaultRedirectStrategy)
            (org.apache.http.nio.conn.ssl SSLIOSessionStrategy)
-           (org.apache.http.client.config RequestConfig))
+           (org.apache.http.client.config RequestConfig)
+           (org.apache.http.nio.client.methods HttpAsyncMethods AsyncCharConsumer AsyncByteConsumer))
   (:require [puppetlabs.ssl-utils.core :as ssl]
             [clojure.string :as str]
             [puppetlabs.kitchensink.core :as ks]
@@ -330,6 +331,26 @@
     (.start client)
     client))
 
+(defn legacy-execute
+  [client request callback]
+  (.execute client request callback))
+
+(defn streaming-execute
+  [client request callback]
+  (println "IT'S THE STREAMING OF THE FUTURE!!!!!!!!!!!!!!")
+  (let [consumer (proxy [AsyncByteConsumer] []
+                   (onResponseReceived [response]
+                     (println "RESPONSE RECEIVED, YO"))
+                   (onByteReceived [buf ioctrl]
+                     (println "ONBYTE RECEIVED, YO"))
+                   (buildResult [http-context]
+                     (println "BUILD RESULT, YO")
+                     nil))]
+    (.execute client
+      (HttpAsyncMethods/create request)
+      consumer
+      callback)))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Public
 
@@ -359,19 +380,23 @@
   [opts :- common/RawUserRequestOptions
    callback :- common/ResponseCallbackFn
    client]
-  (let [defaults {:headers         {}
-                  :body            nil
+  (let [defaults {:headers {}
+                  :body nil
                   :decompress-body true
-                  :as              :stream}
+                  :as :stream
+                  :future-streaming false}
         opts (merge defaults opts)
         {:keys [method url body] :as coerced-opts} (coerce-opts opts)
+        future-streaming? (clojure.core/get opts :future-streaming)
         request (construct-request method url)
         result (promise)]
     (.setHeaders request (:headers coerced-opts))
     (when body
       (.setEntity request body))
-    (.execute client request
-              (future-callback client result opts callback))
+    (let [callback (future-callback client result opts callback)]
+      (if future-streaming?
+        (streaming-execute client request callback)
+        (legacy-execute client request callback)))
     result))
 
 (schema/defn create-client :- (schema/protocol common/HTTPClient)

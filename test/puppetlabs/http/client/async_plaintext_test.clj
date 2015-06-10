@@ -1,7 +1,8 @@
 (ns puppetlabs.http.client.async-plaintext-test
   (:import (com.puppetlabs.http.client Async RequestOptions ClientOptions)
            (org.apache.http.impl.nio.client HttpAsyncClients)
-           (java.net URI SocketTimeoutException ServerSocket))
+           (java.net URI SocketTimeoutException ServerSocket)
+           (java.io ByteArrayInputStream StringReader BufferedInputStream PipedOutputStream PipedInputStream))
   (:require [clojure.test :refer :all]
             [puppetlabs.http.client.test-common :refer :all]
             [puppetlabs.trapperkeeper.core :as tk]
@@ -11,11 +12,12 @@
             [puppetlabs.trapperkeeper.services.webserver.jetty9-service :as jetty9]
             [puppetlabs.http.client.common :as common]
             [puppetlabs.http.client.async :as async]
-            [schema.test :as schema-test]))
+            [schema.test :as schema-test]
+            [clojure.java.io :as io]))
 
 (use-fixtures :once schema-test/validate-schemas)
 
-(defn app
+(defn hello-world-app
   [_]
   {:status 200
    :body "Hello, World!"})
@@ -23,12 +25,12 @@
 (tk/defservice test-web-service
   [[:WebserverService add-ring-handler]]
   (init [this context]
-        (add-ring-handler app "/hello")
+        (add-ring-handler hello-world-app "/hello")
         context))
 
 (deftest persistent-async-client-test
   (testlogging/with-test-logging
-    (testutils/with-app-with-config app
+    (testutils/with-app-with-config hello-world-app
     [jetty9/jetty9-service test-web-service]
     {:webserver {:port 10000}}
     (testing "java async client"
@@ -113,7 +115,7 @@
 
 (deftest request-with-client-test
   (testlogging/with-test-logging
-    (testutils/with-app-with-config app
+    (testutils/with-app-with-config hello-world-app
       [jetty9/jetty9-service test-web-service]
       {:webserver {:port 10000}}
       (let [client (HttpAsyncClients/createDefault)
@@ -131,7 +133,7 @@
 
 (deftest query-params-test-async
   (testlogging/with-test-logging
-    (testutils/with-app-with-config app
+    (testutils/with-app-with-config hello-world-app
       [jetty9/jetty9-service test-params-web-service]
       {:webserver {:port 8080}}
         (testing "URL Query Parameters work with the Java client"
@@ -172,7 +174,7 @@
 
 (deftest redirect-test-async
   (testlogging/with-test-logging
-    (testutils/with-app-with-config app
+    (testutils/with-app-with-config hello-world-app
       [jetty9/jetty9-service redirect-web-service]
       {:webserver {:port 8080}}
       (testing (str "redirects on POST not followed by persistent Java client "
@@ -281,7 +283,7 @@
 (deftest longer-connect-timeout-test-async
   (testing "connection succeeds for async request with longer connect timeout"
     (testlogging/with-test-logging
-      (testwebserver/with-test-webserver app port
+      (testwebserver/with-test-webserver hello-world-app port
         (let [url (str "http://localhost:" port "/hello")]
           (testing "java persistent async client"
             (with-open [client (-> (ClientOptions.)
@@ -336,7 +338,7 @@
 (deftest longer-socket-timeout-test-async
   (testing "get succeeds for async request with longer socket timeout"
     (testlogging/with-test-logging
-      (testwebserver/with-test-webserver app port
+      (testwebserver/with-test-webserver hello-world-app port
         (let [url (str "http://localhost:" port "/hello")]
           (testing "java persistent async client"
             (with-open [client (-> (ClientOptions.)
@@ -353,3 +355,41 @@
               (let [response @(common/get client url {:as :text})]
                 (is (= 200 (:status response)))
                 (is (= "Hello, World!" (:body response)))))))))))
+
+(deftest streamed-content-test-async
+  (testing "can read bytes from stream before response is complete"
+    (let [initial-bytes-read? (promise)
+          ;instream (ByteArrayInputStream. (.getBytes "foo" "UTF-8"))
+          outstream (PipedOutputStream.)
+          instream (PipedInputStream.)
+          _ (.connect instream outstream)
+          outwriter (io/make-writer outstream {})
+          _ (future
+              (println "WRITING STUFF TO STREAM")
+              (.write outwriter "FOO")
+              ;@initial-bytes-read?
+              (.write outwriter "BAR")
+              (.close outwriter))
+          streamed-response-handler (fn [req]
+                                      {:status 200
+                                       :body instream}
+                                      )]
+      (testlogging/with-test-logging
+        (testwebserver/with-test-webserver streamed-response-handler port
+          (let [url (str "http://localhost:" port "/hello")]
+            (testing "clojure persistent async client"
+              (with-open [client (async/create-client {})]
+                (println "!!!!!!!!!!!!!!!! About to make request")
+                (let [response @(common/get client url {:as :stream
+                                                        :future-streaming true})]
+                  (if-let [ex (:error response)]
+                    (throw ex))
+                  (println "!!!!!!!!!!!!!! Got response.")
+                  (is (= 200 (:status #spy/d response)))
+                  (let [instream (:body response)
+                        buf (make-array Byte/TYPE 3)
+                        _ (.read instream buf)]
+                    (is (= "FOO" (String. buf "UTF-8")))
+                    (deliver initial-bytes-read? true)
+                    (.read instream buf)
+                    (is (= "BAR" (String. buf "UTF-8")))))))))))))

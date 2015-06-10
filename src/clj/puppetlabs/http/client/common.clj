@@ -67,13 +67,14 @@
 (def RawUserRequestOptions
   "The list of request options passed by a user into the
   request function. Allows the user to configure a request."
-  {:url                   UrlOrString
-   :method                schema/Keyword
-   (ok :headers)          Headers
-   (ok :body)             Body
-   (ok :decompress-body)  schema/Bool
-   (ok :as)               BodyType
-   (ok :query-params)     {schema/Str schema/Str}})
+  {:url UrlOrString
+   :method schema/Keyword
+   (ok :headers) Headers
+   (ok :body) Body
+   (ok :decompress-body) schema/Bool
+   (ok :as) BodyType
+   (ok :query-params) {schema/Str schema/Str}
+   (ok :future-streaming) schema/Bool})
 
 (def RequestOptions
   "The options from UserRequestOptions that have to do with the
@@ -86,7 +87,8 @@
    :body                  Body
    :decompress-body       schema/Bool
    :as                    BodyType
-   (ok :query-params)     {schema/Str schema/Str}})
+   (ok :query-params)     {schema/Str schema/Str}
+   :future-streaming      schema/Bool})
 
 (def SslContextOptions
   {:ssl-context SSLContext})
