@@ -338,14 +338,19 @@
 (defn streaming-execute
   [client request callback]
   (println "IT'S THE STREAMING OF THE FUTURE!!!!!!!!!!!!!!")
-  (let [consumer (proxy [AsyncByteConsumer] []
-                   (onResponseReceived [response]
-                     (println "RESPONSE RECEIVED, YO"))
-                   (onByteReceived [buf ioctrl]
-                     (println "ONBYTE RECEIVED, YO"))
-                   (buildResult [http-context]
-                     (println "BUILD RESULT, YO")
-                     nil))]
+  (let [consumer (let [response-atom (atom nil)]
+                   ;; TODO: an atom is not a good way to do this.  We will
+                   ;;  need to move this over to java most likely, and use
+                   ;;  a transient like what happens in BasicAsyncResponseConsumer
+                   (proxy [AsyncByteConsumer] []
+                     (onResponseReceived [response]
+                       (println "RESPONSE RECEIVED, YO")
+                       (reset! response-atom response))
+                     (onByteReceived [buf ioctrl]
+                       (println "ONBYTE RECEIVED, YO"))
+                     (buildResult [http-context]
+                       (println "BUILD RESULT, YO")
+                       @response-atom)))]
     (.execute client
       (HttpAsyncMethods/create request)
       consumer
