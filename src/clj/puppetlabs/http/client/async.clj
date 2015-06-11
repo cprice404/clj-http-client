@@ -18,7 +18,7 @@
            (org.apache.http.client.utils URIBuilder)
            (org.apache.http.concurrent FutureCallback)
            (org.apache.http.message BasicHeader)
-           (org.apache.http Consts Header)
+           (org.apache.http Consts Header HttpRequest)
            (org.apache.http.nio.entity NStringEntity)
            (org.apache.http.entity InputStreamEntity ContentType)
            (java.io InputStream)
@@ -27,7 +27,8 @@
            (org.apache.http.impl.client LaxRedirectStrategy DefaultRedirectStrategy)
            (org.apache.http.nio.conn.ssl SSLIOSessionStrategy)
            (org.apache.http.client.config RequestConfig)
-           (org.apache.http.nio.client.methods HttpAsyncMethods AsyncCharConsumer AsyncByteConsumer))
+           (org.apache.http.nio.client.methods HttpAsyncMethods AsyncCharConsumer AsyncByteConsumer)
+           (org.apache.http.nio.client HttpAsyncClient))
   (:require [puppetlabs.ssl-utils.core :as ssl]
             [clojure.string :as str]
             [puppetlabs.kitchensink.core :as ks]
@@ -207,7 +208,7 @@
 (schema/defn response-map
   [opts :- common/RequestOptions
    http-response]
-  (println "RESPONSE TYPE: " (type http-response))
+  (println "building response map; RESPONSE TYPE: " (type http-response))
   (let [headers       (get-resp-headers http-response)
         orig-encoding (headers "content-encoding")]
     (println "OPTS:" opts)
@@ -233,6 +234,8 @@
     (try
       (callback response)
       (catch Exception e
+        (println "FAILURE WHEN TRYING TO ISSUE CALLBACK:")
+        (.printStackTrace e)
         (error-response opts e)))
     response))
 
@@ -241,6 +244,7 @@
    opts :- common/UserRequestOptions
    callback :- common/ResponseCallbackFn
    response :- common/Response]
+  (println "DELIVERING RESULT:" response)
   (deliver result (callback-response opts callback response)))
 
 (schema/defn future-callback
@@ -250,19 +254,24 @@
    callback :- common/ResponseCallbackFn]
   (reify FutureCallback
     (completed [this http-response]
+      (println "ORIG completed called, http-response:" http-response)
       (try
         (let [response (cond-> (response-map opts http-response)
                                (:decompress-body opts) (decompress)
                                (not= :stream (:as opts)) (coerce-body-type))]
+
           (deliver-result result opts callback response))
         (catch Exception e
           (log/warn e "Error when delivering response")
           (deliver-result result opts callback
                           (error-response opts e)))))
     (failed [this e]
+      (println "FAILED:")
+      (.printStackTrace e)
       (deliver-result result opts callback
                       (error-response opts e)))
     (cancelled [this]
+      (println "CANCELLED")
       (deliver-result result opts callback
                       (error-response
                         opts
@@ -334,34 +343,76 @@
     (.start client)
     client))
 
-(defn legacy-execute
+(defn basic-execute
   [client request callback]
   (.execute client request callback))
 
-(defn streaming-execute
-  [client request callback]
+(schema/defn streaming-execute
+  [client :- HttpAsyncClient
+   request :- HttpRequest
+   callback :- FutureCallback]
   (println "IT'S THE STREAMING OF THE FUTURE!!!!!!!!!!!!!!")
-  (let [consumer #_(let [response-atom (atom nil)]
-                   ;; TODO: an atom is not a good way to do this.  We will
-                   ;;  need to move this over to java most likely, and use
-                   ;;  a transient like what happens in BasicAsyncResponseConsumer
-                   (proxy [AsyncByteConsumer] []
-                     (onResponseReceived [response]
-                       (println "RESPONSE RECEIVED, YO")
-                       (reset! response-atom response))
-                     (onEntityEnclosed [http-entity content-type]
-                       (println "ENTITY ENCLOSED, YO:" http-entity content-type))
-                     (onByteReceived [buf ioctrl]
-                       (println "ONBYTE RECEIVED, YO"))
-                     (buildResult [http-context]
-                       (println "BUILD RESULT, YO")
-                       @response-atom)))
-        (StreamingAsyncResponseConsumer.)
-        ]
-    (.execute client
-      (HttpAsyncMethods/create request)
-      consumer
-      callback)))
+  ;; The 'Future'/'FutureCallback' model used by default with the apache async
+  ;; http client library has a bit of a shortcoming in that you can't dereference
+  ;; the future until the response has been read in its entirety, even though
+  ;; there are useful things you can do with the rest of the response object
+  ;; earlier than that.  In the Java API, you'd get around this by implementing
+  ;; your own HttpAsyncResponseConsumer and doing stuff with it directly in
+  ;; the member methods.  That's kind of nathty for a Clojure API, so what we're
+  ;; doing here is to change the callback model a bit.
+  ;;
+  ;; We have our own ResponseConsumer, which will call the callback's `complete`
+  ;; method as soon as its 'onEntityEnclosed' method is executed, which happens
+  ;; after all of the header parsing but before any bytes have been read from
+  ;; the response body.  This will, in turn, cause the Clojure promise to be
+  ;; delivered, which will allow the consuming code to move on with processing
+  ;; the response.  Reading data from the response body stream will block until
+  ;; bytes are available or the end of the stream is reached.
+  ;;
+  ;; TODO:
+  ;; 1. tests
+  ;; 2. figure out what happens if the response has no body; does the 'onEntityEnclosed'
+  ;;    method of the consumer get called at all?  If not, need some conditional
+  ;;    logic that will call the `completed` method when the response is complete.
+  ;; 3. error handling; in the old model, when you dereferenced the Clojure promise,
+  ;;    you knew that the processing was complete, and the promise would either
+  ;;    contain the successful response, or it would contain an error.  In this new
+  ;;    model, it's theoretically possible to dereference the promise and *then*
+  ;;    have a failure occur while the client is reading the rest of the response,
+  ;;    and as of now, I don't know if there's any guarantee that that error will
+  ;;    bubble up in any meaningful way.  We might need to separate this 'fancy-streaming'
+  ;;    stuff out into new functions after all, rather than a feature flag, and then
+  ;;    when people use it we could require them to pass in an error callback fn
+  ;;    or something.
+  (let [consumer (StreamingAsyncResponseConsumer. callback)
+        ;; we still need a callback to pass to the client library.  The idea I had
+        ;; here was to wrap the original callback and ignore the `completed` method,
+        ;; since presumably that'll already have been called, but to still pass
+        ;; through to the failed/cancelled methods.  However, this implementation
+        ;; isn't going to actually do anything useful, because the implementation
+        ;; of those methods is just going to try to deliver the Clojure promise,
+        ;; which will already have been delivered (so, effectively, these callbacks
+        ;; are a no-op as currently written here).  It seems like a promise is
+        ;; not going to be a sufficient return type to use for both blocking
+        ;; the caller until the response is built up enough for them to start working
+        ;; on AND also give them a way to be notified if an error or cancellation
+        ;; occurs afterward.
+        wrapped-future-callback (reify
+                                  FutureCallback
+                                  (completed [this result]
+                                    (println "completed has already been called; ignoring"))
+                                  (failed [this ex]
+                                    (.failed callback ex))
+                                  (cancelled [this]
+                                    (.cancelled callback)))]
+    (let [future-response (.execute client
+                            (HttpAsyncMethods/create request)
+                            consumer
+                            wrapped-future-callback)]
+      (println "FUTURE RESPONSE:" future-response)
+      ;(let [response (.get future-response)]
+      ;  (println "GOT RESPONSE FROM FUTURE:" response))
+      )))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Public
@@ -396,10 +447,10 @@
                   :body nil
                   :decompress-body true
                   :as :stream
-                  :future-streaming false}
+                  :fancy-streaming false}
         opts (merge defaults opts)
         {:keys [method url body] :as coerced-opts} (coerce-opts opts)
-        future-streaming? (clojure.core/get opts :future-streaming)
+        future-streaming? (clojure.core/get opts :fancy-streaming)
         request (construct-request method url)
         result (promise)]
     (.setHeaders request (:headers coerced-opts))
@@ -408,7 +459,8 @@
     (let [callback (future-callback client result opts callback)]
       (if future-streaming?
         (streaming-execute client request callback)
-        (legacy-execute client request callback)))
+        (basic-execute client request callback)))
+
     result))
 
 (schema/defn create-client :- (schema/protocol common/HTTPClient)

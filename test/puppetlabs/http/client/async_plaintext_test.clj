@@ -358,7 +358,9 @@
 
 (deftest streamed-content-test-async
   (testing "can read bytes from stream before response is complete"
-    (let [initial-bytes-read? (promise)
+    (let [big-string (apply str (repeat (* 1024 1024) "f"))
+
+          initial-bytes-read? (promise)
           ;instream (ByteArrayInputStream. (.getBytes "foo" "UTF-8"))
           outstream (PipedOutputStream.)
           instream (PipedInputStream.)
@@ -366,13 +368,15 @@
           outwriter (io/make-writer outstream {})
           _ (future
               (println "WRITING STUFF TO STREAM")
-              (.write outwriter "FOO")
-              (.flush outwriter)
-              (.flush outstream)
+              (.write outwriter big-string)
+              ;(.flush outwriter)
+              ;(.flush outstream)
               ;(.flush instream)
-              ;@initial-bytes-read?
-              (println "SLEEPING")
-              (Thread/sleep 5000)
+              (println "BLOCKING ON PROMISE")
+              @initial-bytes-read?
+              (println "DONE BLOCKING ON PROMISE")
+              ;(println "SLEEPING")
+              ;(Thread/sleep 5000)
               (println "WRITING MORE STUFF TO STREAM")
               (.write outwriter "BAR")
               (println "CLOSING STREAM")
@@ -388,9 +392,12 @@
             (testing "clojure persistent async client"
               (with-open [client (async/create-client {})]
                 (println "!!!!!!!!!!!!!!!! About to make request")
-                (let [response @(common/get client url {:as :stream
-                                                        :decompress-body false
-                                                        :future-streaming true})]
+                (let [response-promise (common/get client url {:as :stream
+                                                               :decompress-body false
+                                                               :fancy-streaming true})
+                      _ (println "GOT RESPONSE PROMISE:" response-promise)
+                      response @response-promise]
+                  (println "DEREFERENCED RESPONSE PROMISE!")
                   (if-let [ex (:error response)]
                     (throw ex))
                   (println "!!!!!!!!!!!!!! Got response.")
@@ -398,7 +405,12 @@
                   (let [instream (:body response)
                         buf (make-array Byte/TYPE 3)
                         _ (.read instream buf)]
-                    (is (= "FOO" (String. buf "UTF-8")))
+                    ;; make sure we can read a few chars off of the stream.  there
+                    ;; may be buffering going on in various layers, so we won't
+                    ;; make any assertions about being able to read the entirety
+                    ;; of the original 'big-string', yet.
+                    (is (= "fff" (String. buf "UTF-8")))
                     (deliver initial-bytes-read? true)
-                    (.read instream buf)
-                    (is (= "BAR" (String. buf "UTF-8")))))))))))))
+                    (let [final-string (str "fff" (slurp instream))]
+                      (is (= (str big-string "BAR") final-string)))
+                    (println "TEST DONE READING BODY.")))))))))))

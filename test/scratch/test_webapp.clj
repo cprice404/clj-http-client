@@ -3,7 +3,8 @@
             [puppetlabs.trapperkeeper.core :as tk]
             [puppetlabs.trapperkeeper.app :as tk-app]
             [puppetlabs.trapperkeeper.services.webserver.jetty9-service :as j9]
-            [clojure.tools.namespace.repl :refer (refresh)])
+            [clojure.tools.namespace.repl :refer (refresh)]
+            [clojure.tools.logging :as log])
   (:import (java.io PipedOutputStream PipedInputStream)))
 
 (def app-atom (atom nil))
@@ -18,19 +19,19 @@
                                           _ (.connect instream outstream)
                                           outwriter (io/make-writer outstream {})
                                           _ (future
-                                              (println "WRITING STUFF TO STREAM")
-                                              (.write outwriter "FOO")
+                                              (log/info "WRITING STUFF TO STREAM")
+                                              (.write outwriter (apply str (repeat (* 32 1024) "f")))
                                               (.flush outwriter)
                                               (.flush outstream)
                                               ;(.flush instream)
                                               ;@initial-bytes-read?
-                                              (println "SLEEPING")
+                                              (log/info "SLEEPING")
                                               (Thread/sleep 5000)
-                                              (println "WRITING MORE STUFF TO STREAM")
+                                              (log/info "WRITING MORE STUFF TO STREAM")
                                               (.write outwriter "BAR")
-                                              (println "CLOSING STREAM")
+                                              (log/info "CLOSING STREAM")
                                               (.close outwriter))]
-                                      (println "RETURNING RESPONSE MAP")
+                                      (log/info "RETURNING RESPONSE MAP")
                                       {:status 200
                                        :body instream}))]
     (let [app (tk/boot-services-with-config

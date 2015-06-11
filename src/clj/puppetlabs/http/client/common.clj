@@ -74,7 +74,7 @@
    (ok :decompress-body) schema/Bool
    (ok :as) BodyType
    (ok :query-params) {schema/Str schema/Str}
-   (ok :future-streaming) schema/Bool})
+   (ok :fancy-streaming) schema/Bool})
 
 (def RequestOptions
   "The options from UserRequestOptions that have to do with the
@@ -88,7 +88,7 @@
    :decompress-body       schema/Bool
    :as                    BodyType
    (ok :query-params)     {schema/Str schema/Str}
-   :future-streaming      schema/Bool})
+   :fancy-streaming      schema/Bool})
 
 (def SslContextOptions
   {:ssl-context SSLContext})
