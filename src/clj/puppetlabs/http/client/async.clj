@@ -22,7 +22,7 @@
            (org.apache.http.nio.entity NStringEntity)
            (org.apache.http.entity InputStreamEntity ContentType)
            (java.io InputStream)
-           (com.puppetlabs.http.client.impl Compression)
+           (com.puppetlabs.http.client.impl Compression StreamingAsyncResponseConsumer)
            (org.apache.http.client RedirectStrategy)
            (org.apache.http.impl.client LaxRedirectStrategy DefaultRedirectStrategy)
            (org.apache.http.nio.conn.ssl SSLIOSessionStrategy)
@@ -204,11 +204,14 @@
                         (slurp (:body resp) :encoding charset)
                         ""))))
 
-(defn- response-map
-  [opts http-response]
+(schema/defn response-map
+  [opts :- common/RequestOptions
+   http-response]
+  (println "RESPONSE TYPE: " (type http-response))
   (let [headers       (get-resp-headers http-response)
         orig-encoding (headers "content-encoding")]
-    {:opts                  opts
+    (println "OPTS:" opts)
+    {:opts                  #spy/d opts
      :orig-content-encoding orig-encoding
      :status                (.. http-response getStatusLine getStatusCode)
      :headers               headers
@@ -338,7 +341,7 @@
 (defn streaming-execute
   [client request callback]
   (println "IT'S THE STREAMING OF THE FUTURE!!!!!!!!!!!!!!")
-  (let [consumer (let [response-atom (atom nil)]
+  (let [consumer #_(let [response-atom (atom nil)]
                    ;; TODO: an atom is not a good way to do this.  We will
                    ;;  need to move this over to java most likely, and use
                    ;;  a transient like what happens in BasicAsyncResponseConsumer
@@ -346,11 +349,15 @@
                      (onResponseReceived [response]
                        (println "RESPONSE RECEIVED, YO")
                        (reset! response-atom response))
+                     (onEntityEnclosed [http-entity content-type]
+                       (println "ENTITY ENCLOSED, YO:" http-entity content-type))
                      (onByteReceived [buf ioctrl]
                        (println "ONBYTE RECEIVED, YO"))
                      (buildResult [http-context]
                        (println "BUILD RESULT, YO")
-                       @response-atom)))]
+                       @response-atom)))
+        (StreamingAsyncResponseConsumer.)
+        ]
     (.execute client
       (HttpAsyncMethods/create request)
       consumer

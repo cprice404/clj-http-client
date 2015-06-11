@@ -367,20 +367,29 @@
           _ (future
               (println "WRITING STUFF TO STREAM")
               (.write outwriter "FOO")
+              (.flush outwriter)
+              (.flush outstream)
+              ;(.flush instream)
               ;@initial-bytes-read?
+              (println "SLEEPING")
+              (Thread/sleep 5000)
+              (println "WRITING MORE STUFF TO STREAM")
               (.write outwriter "BAR")
+              (println "CLOSING STREAM")
               (.close outwriter))
           streamed-response-handler (fn [req]
+                                      (println "RETURNING RESPONSE MAP")
                                       {:status 200
-                                       :body instream}
-                                      )]
+                                       :body instream})]
       (testlogging/with-test-logging
         (testwebserver/with-test-webserver streamed-response-handler port
           (let [url (str "http://localhost:" port "/hello")]
+            (println "URL:" url)
             (testing "clojure persistent async client"
               (with-open [client (async/create-client {})]
                 (println "!!!!!!!!!!!!!!!! About to make request")
                 (let [response @(common/get client url {:as :stream
+                                                        :decompress-body false
                                                         :future-streaming true})]
                   (if-let [ex (:error response)]
                     (throw ex))
