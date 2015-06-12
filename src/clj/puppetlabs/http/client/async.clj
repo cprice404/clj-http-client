@@ -18,17 +18,18 @@
            (org.apache.http.client.utils URIBuilder)
            (org.apache.http.concurrent FutureCallback)
            (org.apache.http.message BasicHeader)
-           (org.apache.http Consts Header HttpRequest)
+           (org.apache.http Consts Header HttpRequest HttpResponse)
            (org.apache.http.nio.entity NStringEntity)
            (org.apache.http.entity InputStreamEntity ContentType)
            (java.io InputStream)
-           (com.puppetlabs.http.client.impl Compression StreamingAsyncResponseConsumer)
+           (com.puppetlabs.http.client.impl Compression StreamingAsyncResponseConsumer Promise FnDeliverable)
            (org.apache.http.client RedirectStrategy)
            (org.apache.http.impl.client LaxRedirectStrategy DefaultRedirectStrategy)
            (org.apache.http.nio.conn.ssl SSLIOSessionStrategy)
            (org.apache.http.client.config RequestConfig)
            (org.apache.http.nio.client.methods HttpAsyncMethods AsyncCharConsumer AsyncByteConsumer)
-           (org.apache.http.nio.client HttpAsyncClient))
+           (org.apache.http.nio.client HttpAsyncClient)
+           (clojure.lang IFn))
   (:require [puppetlabs.ssl-utils.core :as ssl]
             [clojure.string :as str]
             [puppetlabs.kitchensink.core :as ks]
@@ -208,11 +209,11 @@
 (schema/defn response-map
   [opts :- common/RequestOptions
    http-response]
-  (println "building response map; RESPONSE TYPE: " (type http-response))
+  (log/info "building response map; RESPONSE TYPE: " (type http-response))
   (let [headers       (get-resp-headers http-response)
         orig-encoding (headers "content-encoding")]
-    (println "OPTS:" opts)
-    {:opts                  #spy/d opts
+    (log/info "OPTS:" (dissoc opts :early-response-callback))
+    {:opts                  opts
      :orig-content-encoding orig-encoding
      :status                (.. http-response getStatusLine getStatusCode)
      :headers               headers
@@ -234,7 +235,7 @@
     (try
       (callback response)
       (catch Exception e
-        (println "FAILURE WHEN TRYING TO ISSUE CALLBACK:")
+        (log/info "FAILURE WHEN TRYING TO ISSUE CALLBACK:")
         (.printStackTrace e)
         (error-response opts e)))
     response))
@@ -244,8 +245,15 @@
    opts :- common/UserRequestOptions
    callback :- common/ResponseCallbackFn
    response :- common/Response]
-  (println "DELIVERING RESULT:" response)
+  (log/info "DELIVERING RESULT:" response)
   (deliver result (callback-response opts callback response)))
+
+(schema/defn prepare-response
+  [opts :- common/RequestOptions
+   http-response :- HttpResponse]
+  (cond-> (response-map opts http-response)
+    (:decompress-body opts) (decompress)
+    (not= :stream (:as opts)) (coerce-body-type)))
 
 (schema/defn future-callback
   [client :- common/Client
@@ -254,24 +262,21 @@
    callback :- common/ResponseCallbackFn]
   (reify FutureCallback
     (completed [this http-response]
-      (println "ORIG completed called, http-response:" http-response)
+      (log/info "ORIG completed called, http-response:" http-response)
       (try
-        (let [response (cond-> (response-map opts http-response)
-                               (:decompress-body opts) (decompress)
-                               (not= :stream (:as opts)) (coerce-body-type))]
-
+        (let [response (prepare-response opts http-response)]
           (deliver-result result opts callback response))
         (catch Exception e
           (log/warn e "Error when delivering response")
           (deliver-result result opts callback
                           (error-response opts e)))))
     (failed [this e]
-      (println "FAILED:")
+      (log/info "FAILED:")
       (.printStackTrace e)
       (deliver-result result opts callback
                       (error-response opts e)))
     (cancelled [this]
-      (println "CANCELLED")
+      (log/info "CANCELLED")
       (deliver-result result opts callback
                       (error-response
                         opts
@@ -350,8 +355,11 @@
 (schema/defn streaming-execute
   [client :- HttpAsyncClient
    request :- HttpRequest
-   callback :- FutureCallback]
-  (println "IT'S THE STREAMING OF THE FUTURE!!!!!!!!!!!!!!")
+   opts :- common/RequestOptions
+   callback :- FutureCallback
+   complete-promise :- IFn
+   early-response-callback :- IFn]
+  (log/info "IT'S THE STREAMING OF THE FUTURE!!!!!!!!!!!!!!")
   ;; The 'Future'/'FutureCallback' model used by default with the apache async
   ;; http client library has a bit of a shortcoming in that you can't dereference
   ;; the future until the response has been read in its entirety, even though
@@ -384,7 +392,12 @@
   ;;    stuff out into new functions after all, rather than a feature flag, and then
   ;;    when people use it we could require them to pass in an error callback fn
   ;;    or something.
-  (let [consumer (StreamingAsyncResponseConsumer. callback)
+  (let [#_wrapped-promise #_(proxy [Promise] []
+                               (deliver [this val] (deliver early-response-callback val)))
+        consumer (StreamingAsyncResponseConsumer.
+                   (FnDeliverable. (fn [http-response] (early-response-callback
+                                                         (-> (prepare-response opts http-response)
+                                                           (assoc :complete-promise complete-promise))))))
         ;; we still need a callback to pass to the client library.  The idea I had
         ;; here was to wrap the original callback and ignore the `completed` method,
         ;; since presumably that'll already have been called, but to still pass
@@ -397,21 +410,22 @@
         ;; the caller until the response is built up enough for them to start working
         ;; on AND also give them a way to be notified if an error or cancellation
         ;; occurs afterward.
-        wrapped-future-callback (reify
-                                  FutureCallback
-                                  (completed [this result]
-                                    (println "completed has already been called; ignoring"))
-                                  (failed [this ex]
-                                    (.failed callback ex))
-                                  (cancelled [this]
-                                    (.cancelled callback)))]
+        ;wrapped-future-callback (reify
+        ;                          FutureCallback
+        ;                          (completed [this result]
+        ;                            (log/info "completed has already been called; ignoring"))
+        ;                          (failed [this ex]
+        ;                            (.failed callback ex))
+        ;                          (cancelled [this]
+        ;                            (.cancelled callback)))
+        ]
     (let [future-response (.execute client
                             (HttpAsyncMethods/create request)
                             consumer
-                            wrapped-future-callback)]
-      (println "FUTURE RESPONSE:" future-response)
+                            callback)]
+      (log/info "FUTURE RESPONSE:" future-response)
       ;(let [response (.get future-response)]
-      ;  (println "GOT RESPONSE FROM FUTURE:" response))
+      ;  (log/info "GOT RESPONSE FROM FUTURE:" response))
       )))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -443,25 +457,27 @@
   [opts :- common/RawUserRequestOptions
    callback :- common/ResponseCallbackFn
    client]
-  (let [defaults {:headers {}
+  (let [early-response-callback (clojure.core/get opts :early-response-callback)
+        defaults {:headers {}
                   :body nil
                   :decompress-body true
-                  :as :stream
-                  :fancy-streaming false}
-        opts (merge defaults opts)
+                  :as :stream}
+        opts (-> (merge defaults opts)
+               (dissoc :early-response-callback))
         {:keys [method url body] :as coerced-opts} (coerce-opts opts)
-        future-streaming? (clojure.core/get opts :fancy-streaming)
         request (construct-request method url)
-        result (promise)]
+        complete-response-promise (promise)]
     (.setHeaders request (:headers coerced-opts))
     (when body
       (.setEntity request body))
-    (let [callback (future-callback client result opts callback)]
-      (if future-streaming?
-        (streaming-execute client request callback)
+    (let [callback (future-callback client complete-response-promise opts callback)]
+      (if early-response-callback
+        (streaming-execute client request opts callback
+          complete-response-promise
+          early-response-callback)
         (basic-execute client request callback)))
 
-    result))
+    complete-response-promise))
 
 (schema/defn create-client :- (schema/protocol common/HTTPClient)
   "Creates a client to be used for making one or more HTTP requests.

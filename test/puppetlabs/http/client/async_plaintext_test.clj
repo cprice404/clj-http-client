@@ -13,7 +13,8 @@
             [puppetlabs.http.client.common :as common]
             [puppetlabs.http.client.async :as async]
             [schema.test :as schema-test]
-            [clojure.java.io :as io]))
+            [clojure.java.io :as io]
+            [clojure.tools.logging :as log]))
 
 (use-fixtures :once schema-test/validate-schemas)
 
@@ -388,21 +389,25 @@
       (testlogging/with-test-logging
         (testwebserver/with-test-webserver streamed-response-handler port
           (let [url (str "http://localhost:" port "/hello")]
-            (println "URL:" url)
+            (log/info "URL:" url)
             (testing "clojure persistent async client"
               (with-open [client (async/create-client {})]
-                (println "!!!!!!!!!!!!!!!! About to make request")
-                (let [response-promise (common/get client url {:as :stream
+                (log/info "!!!!!!!!!!!!!!!! About to make request")
+                (let [early-response-callback (promise)
+                      complete-promise (common/get client url {:as :stream
                                                                :decompress-body false
-                                                               :fancy-streaming true})
-                      _ (println "GOT RESPONSE PROMISE:" response-promise)
-                      response @response-promise]
-                  (println "DEREFERENCED RESPONSE PROMISE!")
+                                                               :early-response-callback early-response-callback})
+                      _ (log/info "GOT COMPLETE PROMISE:" complete-promise)
+                      _ (log/info "WAITING FOR EARLY RESPONSE PROMISE")
+                      response @early-response-callback]
+                  (log/info "EARLY RESPONSE PROMISE DELIVERED")
                   (if-let [ex (:error response)]
                     (throw ex))
-                  (println "!!!!!!!!!!!!!! Got response.")
-                  (is (= 200 (:status #spy/d response)))
-                  (let [instream (:body response)
+                  (is (= (:complete-promise response) complete-promise))
+                  (log/info "!!!!!!!!!!!!!! Got response.")
+                  (log/info " response keys: " (keys response))
+                  (is (= 200 (:status response)))
+                  (let [instream #spy/d (:body response)
                         buf (make-array Byte/TYPE 3)
                         _ (.read instream buf)]
                     ;; make sure we can read a few chars off of the stream.  there
@@ -413,4 +418,17 @@
                     (deliver initial-bytes-read? true)
                     (let [final-string (str "fff" (slurp instream))]
                       (is (= (str big-string "BAR") final-string)))
-                    (println "TEST DONE READING BODY.")))))))))))
+                    (log/info "TEST DONE READING BODY.")
+
+                    @complete-promise
+                    (log/info "DEREFERENCED RESPONSE PROMISE!")
+                    (.close client)))))))
+      )
+    )))
+
+
+
+
+
+
+

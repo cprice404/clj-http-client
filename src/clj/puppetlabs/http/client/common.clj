@@ -2,9 +2,9 @@
   (:import (java.net URL)
            (javax.net.ssl SSLContext)
            (org.apache.http.impl.nio.client CloseableHttpAsyncClient)
-           (clojure.lang IBlockingDeref)
            (java.io InputStream)
-           (java.nio.charset Charset))
+           (java.nio.charset Charset)
+           (clojure.lang IBlockingDeref IFn))
   (:require [schema.core :as schema])
   (:refer-clojure :exclude (get)))
 
@@ -74,7 +74,7 @@
    (ok :decompress-body) schema/Bool
    (ok :as) BodyType
    (ok :query-params) {schema/Str schema/Str}
-   (ok :fancy-streaming) schema/Bool})
+   (ok :early-response-callback) IFn})
 
 (def RequestOptions
   "The options from UserRequestOptions that have to do with the
@@ -87,8 +87,7 @@
    :body                  Body
    :decompress-body       schema/Bool
    :as                    BodyType
-   (ok :query-params)     {schema/Str schema/Str}
-   :fancy-streaming      schema/Bool})
+   (ok :query-params)     {schema/Str schema/Str}})
 
 (def SslContextOptions
   {:ssl-context SSLContext})

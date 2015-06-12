@@ -4,30 +4,23 @@ import org.apache.http.ContentTooLongException;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.annotation.ThreadSafe;
-import org.apache.http.concurrent.FutureCallback;
 import org.apache.http.entity.BasicHttpEntity;
 import org.apache.http.entity.ContentType;
-import org.apache.http.entity.InputStreamEntity;
 import org.apache.http.nio.ContentDecoder;
 import org.apache.http.nio.IOControl;
-import org.apache.http.nio.client.methods.AsyncByteConsumer;
-import org.apache.http.nio.client.methods.AsyncCharConsumer;
 import org.apache.http.nio.conn.ManagedNHttpClientConnection;
-import org.apache.http.nio.entity.ContentBufferEntity;
 import org.apache.http.nio.protocol.AbstractAsyncResponseConsumer;
 import org.apache.http.nio.protocol.HttpAsyncResponseConsumer;
 import org.apache.http.nio.reactor.IOSession;
-import org.apache.http.nio.util.HeapByteBufferAllocator;
-import org.apache.http.nio.util.SharedInputBuffer;
-import org.apache.http.nio.util.SimpleInputBuffer;
 import org.apache.http.protocol.HttpContext;
 import org.apache.http.util.Asserts;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
 import java.nio.channels.SelectionKey;
 
 /**
@@ -65,6 +58,8 @@ public class StreamingAsyncResponseConsumer //extends AsyncByteConsumer<HttpResp
     //    allocate that amount of memory up front.)
     //
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(StreamingAsyncResponseConsumer.class);
+
     private final ByteBuffer bbuf;
 
     private volatile HttpResponse response;
@@ -72,18 +67,21 @@ public class StreamingAsyncResponseConsumer //extends AsyncByteConsumer<HttpResp
 //    private volatile SharedInputBuffer buf;
 //    private volatile PipedInputStream piped_in;
     private volatile PipedOutputStream piped_out;
-    private volatile FutureCallback<HttpResponse> callback;
+//    private volatile FutureCallback<HttpResponse> callback;
+    private volatile Deliverable<HttpResponse> early_response;
 
-    public StreamingAsyncResponseConsumer(FutureCallback<HttpResponse> callback) {
+    public StreamingAsyncResponseConsumer(Deliverable<HttpResponse> early_response) {
         super();
-        this.callback = callback;
+//        this.callback = callback;
+        this.early_response = early_response;
         // TODO: think about this default buffer size
         this.bbuf = ByteBuffer.allocate(8 * 1024);
+
     }
 
     @Override
     protected void onResponseReceived(final HttpResponse response) throws IOException {
-        System.out.println("ON RESPONSE RECIEVED");
+        LOGGER.info("ON RESPONSE RECIEVED");
         this.response = response;
     }
 
@@ -91,7 +89,7 @@ public class StreamingAsyncResponseConsumer //extends AsyncByteConsumer<HttpResp
     @Override
     protected void onEntityEnclosed(
             final HttpEntity entity, final ContentType contentType) throws IOException {
-        System.out.println("ON ENTITY ENCLOSED");
+        LOGGER.info("ON ENTITY ENCLOSED");
         long len = entity.getContentLength();
         if (len > Integer.MAX_VALUE) {
             throw new ContentTooLongException("Entity content is too long: " + len);
@@ -99,7 +97,7 @@ public class StreamingAsyncResponseConsumer //extends AsyncByteConsumer<HttpResp
         if (len < 0) {
             len = 4096;
         }
-        System.out.println("ON ENTITY CREATING BUFFERS");
+        LOGGER.info("ON ENTITY CREATING BUFFERS");
 //        this.buf = new SimpleInputBuffer((int) len, new HeapByteBufferAllocator());
 //        this.buf = new SharedInputBuffer((int) len, new HeapByteBufferAllocator());
 //        this.response.setEntity(new ContentBufferEntity(entity, this.buf));
@@ -115,14 +113,15 @@ public class StreamingAsyncResponseConsumer //extends AsyncByteConsumer<HttpResp
 
         http_entity.setContent(piped_in);
         this.response.setEntity(http_entity);
-        System.out.println("ON ENTITY DONE CREATING BUFFERS, CALLING CALLBACK");
-        this.callback.completed(this.response);
+        LOGGER.info("ON ENTITY DONE CREATING BUFFERS, CALLING CALLBACK");
+        this.early_response.deliver(this.response);
+//        this.callback.completed(this.response);
     }
 
 //    @Override
 //    protected void onContentReceived(
 //            final ContentDecoder decoder, final IOControl ioctrl) throws IOException {
-//        System.out.println("ON CONTENT RECEIVED");
+//        LOGGER.info("ON CONTENT RECEIVED");
 ////        Asserts.notNull(this.buf, "Content buffer");
 //        Asserts.notNull(this.piped_out, "Piped output stream");
 ////        this.buf.consumeContent(decoder, ioctrl);
@@ -172,14 +171,14 @@ public class StreamingAsyncResponseConsumer //extends AsyncByteConsumer<HttpResp
 
     @Override
     protected void releaseResources() {
-        System.out.println("RELEASE RESOURCES");
+        LOGGER.info("RELEASE RESOURCES");
         this.response = null;
 //        this.buf = null;
     }
 
     @Override
     protected HttpResponse buildResult(final HttpContext context) {
-        System.out.println("BUILD RESULT");
+        LOGGER.info("BUILD RESULT");
         try {
             this.piped_out.close();
         } catch (IOException e) {
